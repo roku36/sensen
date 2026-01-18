@@ -6,7 +6,7 @@ pub(super) fn plugin(app: &mut App) {
     app.add_systems(Update, apply_interaction_palette);
 
     app.load_resource::<InteractionAssets>();
-    app.add_observer(play_on_hover_sound_effect);
+    app.add_systems(Update, play_on_hover_sound_effect);
     app.add_observer(play_on_click_sound_effect);
 }
 
@@ -57,17 +57,18 @@ impl FromWorld for InteractionAssets {
 }
 
 fn play_on_hover_sound_effect(
-    trigger: On<Pointer<Over>>,
     mut commands: Commands,
     interaction_assets: Option<Res<InteractionAssets>>,
-    interaction_query: Query<(), With<Interaction>>,
+    interaction_query: Query<&Interaction, Changed<Interaction>>,
 ) {
     let Some(interaction_assets) = interaction_assets else {
         return;
     };
 
-    if interaction_query.contains(trigger.entity) {
-        commands.spawn(sound_effect(interaction_assets.hover.clone()));
+    for interaction in &interaction_query {
+        if *interaction == Interaction::Hovered {
+            commands.spawn(sound_effect(interaction_assets.hover.clone()));
+        }
     }
 }
 

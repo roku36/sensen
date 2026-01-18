@@ -8,11 +8,13 @@ mod audio;
 mod demo;
 #[cfg(feature = "dev")]
 mod dev_tools;
+mod game;
 mod menus;
 mod screens;
 mod theme;
 
 use bevy::{asset::AssetMetaCheck, prelude::*};
+use bevy_brp_extras::BrpExtrasPlugin;
 
 fn main() -> AppExit {
     App::new().add_plugins(AppPlugin).run()
@@ -43,6 +45,9 @@ impl Plugin for AppPlugin {
                 }),
         );
 
+        // Add Bevy Remote Protocol for debugging
+        app.add_plugins(BrpExtrasPlugin::default());
+
         // Add other plugins.
         app.add_plugins((
             asset_tracking::plugin,
@@ -50,6 +55,7 @@ impl Plugin for AppPlugin {
             demo::plugin,
             #[cfg(feature = "dev")]
             dev_tools::plugin,
+            game::plugin,
             menus::plugin,
             screens::plugin,
             theme::plugin,

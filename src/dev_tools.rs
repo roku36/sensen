@@ -15,10 +15,20 @@ pub(super) fn plugin(app: &mut App) {
         Update,
         toggle_debug_ui.run_if(input_just_pressed(TOGGLE_KEY)),
     );
+
+    // Debug shortcut: Press F1 to jump directly to Gameplay screen
+    app.add_systems(
+        Update,
+        jump_to_gameplay.run_if(input_just_pressed(KeyCode::F1)),
+    );
 }
 
 const TOGGLE_KEY: KeyCode = KeyCode::Backquote;
 
 fn toggle_debug_ui(mut options: ResMut<UiDebugOptions>) {
     options.toggle();
+}
+
+fn jump_to_gameplay(mut next_screen: ResMut<NextState<Screen>>) {
+    next_screen.set(Screen::Gameplay);
 }

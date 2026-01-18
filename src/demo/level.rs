@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use crate::{
     asset_tracking::LoadResource,
     audio::music,
-    demo::player::{PlayerAssets, player},
+    game::{DrawCardsMessage, OpponentBundle, PlayerBundle, create_test_deck},
     screens::Screen,
 };
 
@@ -33,20 +33,33 @@ impl FromWorld for LevelAssets {
 pub fn spawn_level(
     mut commands: Commands,
     level_assets: Res<LevelAssets>,
-    player_assets: Res<PlayerAssets>,
-    mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
+    mut draw_messages: MessageWriter<DrawCardsMessage>,
 ) {
     commands.spawn((
         Name::new("Level"),
         Transform::default(),
         Visibility::default(),
         DespawnOnExit(Screen::Gameplay),
-        children![
-            player(400.0, &player_assets, &mut texture_atlas_layouts),
-            (
-                Name::new("Gameplay Music"),
-                music(level_assets.music.clone())
-            )
-        ],
+        children![(
+            Name::new("Gameplay Music"),
+            music(level_assets.music.clone())
+        )],
     ));
+
+    // Spawn local player with test deck, cost rate 1.0/sec
+    let player_entity = commands
+        .spawn((
+            PlayerBundle::new(1.0, create_test_deck()),
+            DespawnOnExit(Screen::Gameplay),
+        ))
+        .id();
+
+    // Spawn opponent with 100 HP
+    commands.spawn((OpponentBundle::new(100.0), DespawnOnExit(Screen::Gameplay)));
+
+    // Draw initial hand of 5 cards
+    draw_messages.write(DrawCardsMessage {
+        player: player_entity,
+        count: 5,
+    });
 }
