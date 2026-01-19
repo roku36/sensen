@@ -8,7 +8,7 @@ pub fn plugin(app: &mut App) {
 
 /// Player's accumulated cost resource.
 /// Increases over time and is spent to play cards.
-#[derive(Component, Debug, Default, Reflect)]
+#[derive(Component, Debug, Default, Clone, Reflect)]
 #[reflect(Component)]
 pub struct Cost {
     /// Current accumulated cost

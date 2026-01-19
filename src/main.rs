@@ -10,11 +10,11 @@ mod demo;
 mod dev_tools;
 mod game;
 mod menus;
+mod network;
 mod screens;
 mod theme;
 
-use bevy::{asset::AssetMetaCheck, prelude::*};
-use bevy_brp_extras::BrpExtrasPlugin;
+use bevy::{asset::AssetMetaCheck, prelude::*, remote::http::RemoteHttpPlugin};
 
 fn main() -> AppExit {
     App::new().add_plugins(AppPlugin).run()
@@ -45,9 +45,6 @@ impl Plugin for AppPlugin {
                 }),
         );
 
-        // Add Bevy Remote Protocol for debugging
-        app.add_plugins(BrpExtrasPlugin::default());
-
         // Add other plugins.
         app.add_plugins((
             asset_tracking::plugin,
@@ -57,9 +54,27 @@ impl Plugin for AppPlugin {
             dev_tools::plugin,
             game::plugin,
             menus::plugin,
+            network::plugin,
             screens::plugin,
             theme::plugin,
         ));
+
+        // Add Bevy Remote Protocol for debugging (dev only)
+        #[cfg(feature = "dev")]
+        {
+            use bevy::remote::RemotePlugin;
+
+            // Parse --brp-port=XXXX from CLI args
+            let port = std::env::args()
+                .find(|arg| arg.starts_with("--brp-port="))
+                .and_then(|arg| arg.strip_prefix("--brp-port=").map(|s| s.to_string()))
+                .and_then(|p| p.parse::<u16>().ok())
+                .unwrap_or(15702);
+
+            app.add_plugins(RemotePlugin::default());
+            app.add_plugins(RemoteHttpPlugin::default().with_port(port));
+            info!("BRP listening on port {}", port);
+        }
 
         // Order new `AppSystems` variants by adding them here:
         app.configure_sets(

@@ -34,7 +34,7 @@ pub struct CardPlayedMessage {
 }
 
 /// The player's deck of cards (draw pile).
-#[derive(Component, Debug, Default, Reflect)]
+#[derive(Component, Debug, Default, Clone, Reflect)]
 #[reflect(Component)]
 pub struct Deck {
     pub cards: Vec<CardId>,
@@ -71,7 +71,7 @@ impl Deck {
 }
 
 /// The player's hand of cards.
-#[derive(Component, Debug, Default, Reflect)]
+#[derive(Component, Debug, Default, Clone, Reflect)]
 #[reflect(Component)]
 pub struct Hand {
     pub cards: Vec<CardId>,
@@ -100,7 +100,7 @@ impl Hand {
 }
 
 /// The player's discard pile.
-#[derive(Component, Debug, Default, Reflect)]
+#[derive(Component, Debug, Default, Clone, Reflect)]
 #[reflect(Component)]
 pub struct DiscardPile {
     pub cards: Vec<CardId>,

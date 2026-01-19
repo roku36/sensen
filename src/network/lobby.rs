@@ -1,0 +1,149 @@
+//! Lobby system for matchmaking.
+
+use std::ops::DerefMut;
+
+use bevy::prelude::*;
+use bevy_ggrs::Session;
+use bevy_ggrs::prelude::*;
+use bevy_matchbox::matchbox_socket::WebRtcSocketBuilder;
+use bevy_matchbox::prelude::*;
+
+use super::SensenGgrsConfig;
+use crate::screens::Screen;
+
+/// Number of players in a match.
+const NUM_PLAYERS: usize = 2;
+
+/// Default matchbox server URL.
+const MATCHBOX_SERVER: &str = "ws://localhost:3536/sensen?next=2";
+
+/// Marker for lobby UI elements.
+#[derive(Component)]
+pub struct LobbyUI;
+
+/// Marker for lobby status text.
+#[derive(Component)]
+pub struct LobbyText;
+
+/// Start the matchbox socket connection.
+pub fn start_matchbox_socket(mut commands: Commands) {
+    let room_url = MATCHBOX_SERVER.to_string();
+    info!("Connecting to matchbox server: {}", room_url);
+    // Create socket with unreliable channel for GGRS
+    let socket = MatchboxSocket::from(WebRtcSocketBuilder::new(room_url).add_unreliable_channel());
+    commands.insert_resource(socket);
+}
+
+/// Setup lobby UI.
+pub fn lobby_startup(mut commands: Commands) {
+    commands.spawn((
+        Name::new("Lobby UI"),
+        LobbyUI,
+        Node {
+            position_type: PositionType::Absolute,
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(20.0),
+            ..default()
+        },
+        BackgroundColor(Color::srgb(0.1, 0.1, 0.15)),
+        children![
+            (
+                Text::new("SENSEN"),
+                TextFont::from_font_size(48.0),
+                TextColor(Color::WHITE),
+            ),
+            (
+                LobbyText,
+                Text::new("Connecting..."),
+                TextFont::from_font_size(24.0),
+                TextColor(Color::srgb(0.7, 0.7, 0.7)),
+            ),
+        ],
+    ));
+}
+
+/// Clean up lobby UI when leaving.
+pub fn lobby_cleanup(mut commands: Commands, lobby_ui: Query<Entity, With<LobbyUI>>) {
+    for entity in &lobby_ui {
+        commands.entity(entity).despawn();
+    }
+}
+
+/// Main lobby system - handles matchmaking and session creation.
+pub fn lobby_system(
+    mut commands: Commands,
+    socket: Option<ResMut<MatchboxSocket>>,
+    mut next_screen: ResMut<NextState<Screen>>,
+    mut lobby_text: Query<&mut Text, With<LobbyText>>,
+) {
+    let Some(mut socket) = socket else {
+        return;
+    };
+
+    // Update socket state
+    let Ok(_peer_changes) = socket.try_update_peers() else {
+        warn!("Socket dropped");
+        return;
+    };
+
+    // Get socket reference for method calls
+    let socket = socket.deref_mut();
+
+    // Get connected peers
+    let connected_peers = socket.connected_peers().count();
+
+    // Update UI
+    for mut text in &mut lobby_text {
+        if connected_peers == 0 {
+            text.0 = "Waiting for opponent...".to_string();
+        } else {
+            text.0 = format!("Connected: {}/{}", connected_peers + 1, NUM_PLAYERS);
+        }
+    }
+
+    // Check if we have enough players
+    if connected_peers + 1 < NUM_PLAYERS {
+        return;
+    }
+
+    info!("All players connected! Starting game...");
+
+    // Create GGRS P2P session
+    let mut session_builder = SessionBuilder::<SensenGgrsConfig>::new()
+        .with_num_players(NUM_PLAYERS)
+        .with_input_delay(2);
+
+    // Add players
+    for (i, player) in socket.players().into_iter().enumerate() {
+        session_builder = session_builder
+            .add_player(player, i)
+            .expect("Failed to add player");
+    }
+
+    // Build session with socket
+    let channel = socket.take_channel(0).unwrap();
+    let session = session_builder
+        .start_p2p_session(channel)
+        .expect("Failed to start P2P session");
+
+    commands.insert_resource(Session::P2P(session));
+
+    // Transition to gameplay
+    next_screen.set(Screen::Gameplay);
+}
+
+/// Log GGRS events during gameplay.
+pub fn log_ggrs_events(mut session: ResMut<Session<SensenGgrsConfig>>) {
+    match session.as_mut() {
+        Session::P2P(s) => {
+            for event in s.events() {
+                info!("GGRS Event: {:?}", event);
+            }
+        }
+        _ => {}
+    }
+}

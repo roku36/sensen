@@ -38,7 +38,24 @@ pub fn plugin(app: &mut App) {
         Update,
         handle_result_input.run_if(not(in_state(GameResult::Playing))),
     );
+
+    // BRP remote input simulation (dev only)
+    #[cfg(feature = "dev")]
+    {
+        app.register_type::<SimulateInput>();
+        app.add_systems(
+            Update,
+            handle_simulated_input.run_if(in_state(Screen::Gameplay)),
+        );
+    }
 }
+
+/// Resource to simulate keyboard input via BRP.
+/// Insert with a key name: "D" for draw, "1"-"9" for cards, "0" for 10th card.
+#[cfg(feature = "dev")]
+#[derive(Resource, Reflect, Default)]
+#[reflect(Resource)]
+pub struct SimulateInput(pub String);
 
 /// Track previous hand state to detect changes
 #[derive(Resource, Default)]
@@ -301,9 +318,9 @@ fn spawn_game_ui(mut commands: Commands) {
                                     height: px(60),
                                     align_items: AlignItems::Center,
                                     justify_content: JustifyContent::Center,
-                                    border_radius: BorderRadius::all(px(8)),
                                     ..default()
                                 },
+                                BorderRadius::all(px(8)),
                                 BackgroundColor(Color::srgb(0.4, 0.2, 0.6)),
                                 children![(
                                     Text::new(format!(
@@ -442,9 +459,9 @@ fn update_hand_display(
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::SpaceBetween,
                     padding: UiRect::all(px(8)),
-                    border_radius: BorderRadius::all(px(8)),
                     ..default()
                 },
+                BorderRadius::all(px(8)),
                 BackgroundColor(Color::srgb(0.2, 0.4, 0.6)),
                 children![
                     // Card name + key
@@ -709,5 +726,54 @@ fn handle_result_input(
             commands.entity(entity).despawn();
         }
         next_screen.set(Screen::Title);
+    }
+}
+
+/// Handle simulated input from BRP (dev only).
+#[cfg(feature = "dev")]
+fn handle_simulated_input(
+    mut commands: Commands,
+    sim_input: Option<Res<SimulateInput>>,
+    mut player_query: Query<(Entity, &Hand, &mut Cost), With<LocalPlayer>>,
+    card_registry: Res<CardRegistry>,
+    mut play_messages: MessageWriter<PlayCardMessage>,
+    mut draw_messages: MessageWriter<DrawCardsMessage>,
+) {
+    let Some(input) = sim_input else { return };
+
+    let key = input.0.to_uppercase();
+    commands.remove_resource::<SimulateInput>();
+
+    let Ok((player_entity, hand, mut cost)) = player_query.single_mut() else {
+        return;
+    };
+
+    if key == "D" {
+        // Draw cards
+        if cost.try_spend(DRAW_COST) {
+            draw_messages.write(DrawCardsMessage {
+                player: player_entity,
+                count: DRAW_COUNT,
+            });
+            info!("SimulateInput: Drew {} cards", DRAW_COUNT);
+        }
+    } else if let Ok(num) = key.parse::<usize>() {
+        // Play card (1-9 -> index 0-8, 0 -> index 9)
+        let index = if num == 0 { 9 } else { num - 1 };
+
+        if let Some(card_id) = hand.cards.get(index) {
+            if let Some(card_def) = card_registry.get(*card_id) {
+                if cost.try_spend(card_def.cost) {
+                    play_messages.write(PlayCardMessage {
+                        player: player_entity,
+                        hand_index: index,
+                    });
+                    info!(
+                        "SimulateInput: Played card {} at index {}",
+                        card_def.name, index
+                    );
+                }
+            }
+        }
     }
 }
