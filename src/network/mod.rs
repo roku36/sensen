@@ -9,6 +9,7 @@ pub use input::*;
 pub use lobby::*;
 
 use bevy::prelude::*;
+use bevy_ggrs::RollbackFrameCount;
 use bevy_ggrs::prelude::*;
 use bevy_matchbox::prelude::{MatchboxSocket, PeerId};
 
@@ -116,6 +117,8 @@ fn cleanup_network_session(
     session: Option<Res<Session<SensenGgrsConfig>>>,
     socket: Option<Res<MatchboxSocket>>,
     network_players: Option<Res<NetworkPlayers>>,
+    ggrs_time: Option<ResMut<Time<GgrsTime>>>,
+    rollback_frame: Option<ResMut<RollbackFrameCount>>,
     mut game_mode: ResMut<GameMode>,
 ) {
     if session.is_some() {
@@ -127,5 +130,12 @@ fn cleanup_network_session(
     if network_players.is_some() {
         commands.remove_resource::<NetworkPlayers>();
     }
+    if let Some(mut time) = ggrs_time {
+        *time = Time::new_with(GgrsTime);
+    }
+    if let Some(mut frame) = rollback_frame {
+        frame.0 = 0;
+    }
+    commands.remove_resource::<bevy_ggrs::ConfirmedFrameCount>();
     *game_mode = GameMode::Offline;
 }
