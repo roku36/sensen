@@ -1,15 +1,36 @@
 //! Deck system - deck, hand, and discard pile management.
 
 use bevy::{ecs::message::Message, prelude::*};
-use rand::seq::SliceRandom;
+use bevy_ggrs::GgrsSchedule;
 
 use super::CardId;
+use crate::{
+    AppSystems,
+    game::{GameplaySystems, is_offline, is_online},
+    screens::Screen,
+};
 
 pub fn plugin(app: &mut App) {
     app.add_message::<DrawCardsMessage>();
     app.add_message::<PlayCardMessage>();
     app.add_message::<CardPlayedMessage>();
-    app.add_systems(Update, (handle_draw_cards, handle_play_card));
+    app.add_systems(
+        Update,
+        (handle_draw_cards, handle_play_card)
+            .chain()
+            .in_set(AppSystems::Update)
+            .in_set(GameplaySystems::Deck)
+            .run_if(is_offline)
+            .run_if(in_state(Screen::Gameplay)),
+    );
+    app.add_systems(
+        GgrsSchedule,
+        (handle_draw_cards, handle_play_card)
+            .chain()
+            .in_set(GameplaySystems::Deck)
+            .run_if(is_online)
+            .run_if(in_state(Screen::Gameplay)),
+    );
 }
 
 /// Message to draw cards from deck to hand.
@@ -34,21 +55,53 @@ pub struct CardPlayedMessage {
 }
 
 /// The player's deck of cards (draw pile).
-#[derive(Component, Debug, Default, Clone, Reflect)]
+#[derive(Component, Debug, Clone, Reflect)]
 #[reflect(Component)]
 pub struct Deck {
     pub cards: Vec<CardId>,
+    rng_state: u64,
+}
+
+const DEFAULT_DECK_SEED: u64 = 0x23d3_44d3_6f2a_7c15;
+
+impl Default for Deck {
+    fn default() -> Self {
+        Self {
+            cards: Vec::new(),
+            rng_state: DEFAULT_DECK_SEED,
+        }
+    }
 }
 
 impl Deck {
     pub fn new(cards: Vec<CardId>) -> Self {
-        Self { cards }
+        Self {
+            cards,
+            rng_state: DEFAULT_DECK_SEED,
+        }
+    }
+
+    pub fn new_with_seed(cards: Vec<CardId>, seed: u64) -> Self {
+        Self {
+            cards,
+            rng_state: seed,
+        }
+    }
+
+    pub fn seed_for_handle(handle: usize) -> u64 {
+        DEFAULT_DECK_SEED ^ (handle as u64).wrapping_mul(0x9e3779b97f4a7c15)
     }
 
     /// Shuffle the deck.
     pub fn shuffle(&mut self) {
-        let mut rng = rand::rng();
-        self.cards.shuffle(&mut rng);
+        if self.cards.len() < 2 {
+            return;
+        }
+
+        for i in (1..self.cards.len()).rev() {
+            let j = (self.next_rng() % (i as u64 + 1)) as usize;
+            self.cards.swap(i, j);
+        }
     }
 
     /// Draw a card from the top of the deck.
@@ -67,6 +120,14 @@ impl Deck {
 
     pub fn len(&self) -> usize {
         self.cards.len()
+    }
+
+    fn next_rng(&mut self) -> u64 {
+        self.rng_state = self
+            .rng_state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1);
+        self.rng_state
     }
 }
 

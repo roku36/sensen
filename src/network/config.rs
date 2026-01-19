@@ -3,7 +3,7 @@
 use bevy_ggrs::ggrs::Config;
 use bevy_matchbox::prelude::PeerId;
 
-use super::GameInput;
+use crate::input::GameInput;
 
 /// GGRS configuration type for Sensen.
 #[derive(Debug)]

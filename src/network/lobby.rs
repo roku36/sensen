@@ -8,8 +8,8 @@ use bevy_ggrs::prelude::*;
 use bevy_matchbox::matchbox_socket::WebRtcSocketBuilder;
 use bevy_matchbox::prelude::*;
 
-use super::SensenGgrsConfig;
-use crate::screens::Screen;
+use super::{NetworkPlayers, SensenGgrsConfig};
+use crate::{game::GameMode, screens::Screen};
 
 /// Number of players in a match.
 const NUM_PLAYERS: usize = 2;
@@ -79,6 +79,7 @@ pub fn lobby_system(
     socket: Option<ResMut<MatchboxSocket>>,
     mut next_screen: ResMut<NextState<Screen>>,
     mut lobby_text: Query<&mut Text, With<LobbyText>>,
+    mut game_mode: ResMut<GameMode>,
 ) {
     let Some(mut socket) = socket else {
         return;
@@ -112,13 +113,20 @@ pub fn lobby_system(
 
     info!("All players connected! Starting game...");
 
+    let Some(local_peer_id) = socket.id() else {
+        warn!("Matchbox socket has no local peer id yet.");
+        return;
+    };
+
+    let players = socket.players();
+
     // Create GGRS P2P session
     let mut session_builder = SessionBuilder::<SensenGgrsConfig>::new()
         .with_num_players(NUM_PLAYERS)
         .with_input_delay(2);
 
     // Add players
-    for (i, player) in socket.players().into_iter().enumerate() {
+    for (i, player) in players.iter().copied().enumerate() {
         session_builder = session_builder
             .add_player(player, i)
             .expect("Failed to add player");
@@ -131,9 +139,28 @@ pub fn lobby_system(
         .expect("Failed to start P2P session");
 
     commands.insert_resource(Session::P2P(session));
+    commands.insert_resource(build_network_players(local_peer_id, &players));
+    *game_mode = GameMode::Online;
 
     // Transition to gameplay
     next_screen.set(Screen::Gameplay);
+}
+
+fn build_network_players(local_peer_id: PeerId, players: &[PlayerType<PeerId>]) -> NetworkPlayers {
+    let mut handles = Vec::with_capacity(players.len());
+
+    for player in players.iter() {
+        let peer_id = match player {
+            PlayerType::Local => local_peer_id,
+            PlayerType::Remote(id) | PlayerType::Spectator(id) => *id,
+        };
+        handles.push(peer_id);
+    }
+
+    NetworkPlayers {
+        local_peer_id,
+        handles,
+    }
 }
 
 /// Log GGRS events during gameplay.

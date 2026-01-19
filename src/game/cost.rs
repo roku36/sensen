@@ -1,9 +1,29 @@
 //! Cost system - accumulates over time.
 
 use bevy::prelude::*;
+use bevy_ggrs::GgrsSchedule;
+
+use crate::{
+    AppSystems,
+    game::{GameplaySystems, is_offline, is_online},
+    screens::Screen,
+};
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, accumulate_cost);
+    app.add_systems(
+        Update,
+        accumulate_cost
+            .in_set(AppSystems::TickTimers)
+            .run_if(is_offline)
+            .run_if(in_state(Screen::Gameplay)),
+    );
+    app.add_systems(
+        GgrsSchedule,
+        accumulate_cost
+            .in_set(GameplaySystems::Tick)
+            .run_if(is_online)
+            .run_if(in_state(Screen::Gameplay)),
+    );
 }
 
 /// Player's accumulated cost resource.

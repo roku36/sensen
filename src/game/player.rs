@@ -18,11 +18,17 @@ pub struct LocalPlayer;
 #[reflect(Component)]
 pub struct Opponent;
 
+/// Stable player handle used for rollback input mapping.
+#[derive(Component, Debug, Reflect, Copy, Clone, Eq, PartialEq, Hash)]
+#[reflect(Component)]
+pub struct PlayerHandle(pub usize);
+
 /// Bundle for spawning a player entity.
 #[derive(Bundle)]
 pub struct PlayerBundle {
     pub name: Name,
     pub local_player: LocalPlayer,
+    pub handle: PlayerHandle,
     pub health: Health,
     pub cost: Cost,
     pub deck: Deck,
@@ -31,13 +37,14 @@ pub struct PlayerBundle {
 }
 
 impl PlayerBundle {
-    pub fn new(cost_rate: f32, initial_deck: Vec<CardId>) -> Self {
-        let mut deck = Deck::new(initial_deck);
+    pub fn new(handle: usize, cost_rate: f32, initial_deck: Vec<CardId>) -> Self {
+        let mut deck = Deck::new_with_seed(initial_deck, Deck::seed_for_handle(handle));
         deck.shuffle();
 
         Self {
             name: Name::new("Player"),
             local_player: LocalPlayer,
+            handle: PlayerHandle(handle),
             health: Health::new(100.0),
             cost: Cost::new(cost_rate),
             deck,
@@ -52,15 +59,28 @@ impl PlayerBundle {
 pub struct OpponentBundle {
     pub name: Name,
     pub opponent: Opponent,
+    pub handle: PlayerHandle,
     pub health: Health,
+    pub cost: Cost,
+    pub deck: Deck,
+    pub hand: Hand,
+    pub discard_pile: DiscardPile,
 }
 
 impl OpponentBundle {
-    pub fn new(hp: f32) -> Self {
+    pub fn new(handle: usize, cost_rate: f32, initial_deck: Vec<CardId>, hp: f32) -> Self {
+        let mut deck = Deck::new_with_seed(initial_deck, Deck::seed_for_handle(handle));
+        deck.shuffle();
+
         Self {
             name: Name::new("Opponent"),
             opponent: Opponent,
+            handle: PlayerHandle(handle),
             health: Health::new(hp),
+            cost: Cost::new(cost_rate),
+            deck,
+            hand: Hand::default(),
+            discard_pile: DiscardPile::default(),
         }
     }
 }

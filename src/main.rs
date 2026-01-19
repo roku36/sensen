@@ -9,6 +9,7 @@ mod demo;
 #[cfg(feature = "dev")]
 mod dev_tools;
 mod game;
+mod input;
 mod menus;
 mod network;
 mod screens;
@@ -100,7 +101,7 @@ impl Plugin for AppPlugin {
 /// When adding a new variant, make sure to order it in the `configure_sets`
 /// call above.
 #[derive(SystemSet, Debug, Clone, Copy, Eq, PartialEq, Hash, PartialOrd, Ord)]
-enum AppSystems {
+pub(crate) enum AppSystems {
     /// Tick timers.
     TickTimers,
     /// Record player input.

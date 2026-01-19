@@ -1,9 +1,14 @@
 //! Health/HP system for players.
 
 use bevy::{ecs::message::Message, prelude::*};
+use bevy_ggrs::GgrsSchedule;
 
 use super::{LocalPlayer, Opponent};
-use crate::screens::Screen;
+use crate::{
+    AppSystems,
+    game::{GameplaySystems, is_offline, is_online},
+    screens::Screen,
+};
 
 /// Game result state.
 #[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -21,7 +26,20 @@ pub fn plugin(app: &mut App) {
     app.add_message::<DeathMessage>();
     app.add_systems(
         Update,
-        (handle_damage, handle_heal, check_death, handle_game_over),
+        (handle_damage, handle_heal, check_death, handle_game_over)
+            .chain()
+            .in_set(AppSystems::Update)
+            .in_set(GameplaySystems::Health)
+            .run_if(is_offline)
+            .run_if(in_state(Screen::Gameplay)),
+    );
+    app.add_systems(
+        GgrsSchedule,
+        (handle_damage, handle_heal, check_death, handle_game_over)
+            .chain()
+            .in_set(GameplaySystems::Health)
+            .run_if(is_online)
+            .run_if(in_state(Screen::Gameplay)),
     );
     app.add_systems(OnEnter(Screen::Gameplay), reset_game_result);
 }
