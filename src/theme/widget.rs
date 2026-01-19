@@ -112,6 +112,7 @@ where
                 .spawn((
                     Name::new("Button Inner"),
                     Button,
+                    Pickable::default(),
                     BackgroundColor(BUTTON_BACKGROUND),
                     InteractionPalette {
                         none: BUTTON_BACKGROUND,

@@ -14,6 +14,7 @@ pub fn plugin(app: &mut App) {
     app.add_message::<DrawCardsMessage>();
     app.add_message::<PlayCardMessage>();
     app.add_message::<CardPlayedMessage>();
+    app.add_message::<DeckReshuffledMessage>();
     app.add_systems(
         Update,
         (handle_draw_cards, handle_play_card)
@@ -52,6 +53,13 @@ pub struct PlayCardMessage {
 pub struct CardPlayedMessage {
     pub player: Entity,
     pub card_id: super::CardId,
+}
+
+/// Message fired when a deck is refilled and shuffled from the discard pile.
+#[derive(Message)]
+pub struct DeckReshuffledMessage {
+    pub player: Entity,
+    pub deck: Vec<CardId>,
 }
 
 /// The player's deck of cards (draw pile).
@@ -190,6 +198,7 @@ impl DiscardPile {
 fn handle_draw_cards(
     mut messages: MessageReader<DrawCardsMessage>,
     mut query: Query<(&mut Deck, &mut Hand, &mut DiscardPile)>,
+    mut reshuffled_messages: MessageWriter<DeckReshuffledMessage>,
 ) {
     for msg in messages.read() {
         let Ok((mut deck, mut hand, mut discard)) = query.get_mut(msg.player) else {
@@ -202,6 +211,10 @@ fn handle_draw_cards(
                 let recycled = discard.take_all();
                 deck.add_cards(recycled);
                 deck.shuffle();
+                reshuffled_messages.write(DeckReshuffledMessage {
+                    player: msg.player,
+                    deck: deck.cards.clone(),
+                });
             }
 
             // Draw a card if possible

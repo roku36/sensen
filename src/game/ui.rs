@@ -3,27 +3,21 @@
 use bevy::prelude::*;
 
 use super::{
-    CardId, CardRegistry, Cost, DRAW_COST, DRAW_COUNT, Deck, DiscardPile, GameResult, Hand, Health,
-    LocalPlayer, Opponent, PendingInput,
+    Cost, DRAW_COST, DRAW_COUNT, Deck, DiscardPile, GameResult, Health, LocalPlayer, Opponent,
+    PendingInput,
 };
 use crate::{
     AppSystems,
-    input::{INPUT_DRAW, card_flag, flags_from_key_string},
+    input::{INPUT_DRAW, flags_from_key_string},
     screens::Screen,
 };
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<PreviousHandState>();
-    app.add_systems(
-        OnEnter(Screen::Gameplay),
-        (spawn_game_ui, reset_previous_hand_state),
-    );
+    app.add_systems(OnEnter(Screen::Gameplay), spawn_game_ui);
     app.add_systems(
         Update,
         (
             update_cost_display,
-            update_hand_display,
-            update_card_affordability,
             update_deck_display,
             update_health_display,
         )
@@ -33,7 +27,7 @@ pub fn plugin(app: &mut App) {
     );
     app.add_systems(
         Update,
-        (handle_card_click, handle_draw_click)
+        handle_draw_click
             .in_set(AppSystems::RecordInput)
             .run_if(in_state(Screen::Gameplay))
             .run_if(in_state(GameResult::Playing)),
@@ -65,29 +59,9 @@ pub fn plugin(app: &mut App) {
 #[reflect(Resource)]
 pub struct SimulateInput(pub String);
 
-/// Track previous hand state to detect changes.
-#[derive(Resource, Default)]
-struct PreviousHandState {
-    local_cards: Vec<CardId>,
-    opponent_cards: Vec<CardId>,
-}
-
-fn reset_previous_hand_state(mut prev_state: ResMut<PreviousHandState>) {
-    prev_state.local_cards.clear();
-    prev_state.opponent_cards.clear();
-}
-
 /// Marker for the cost display text.
 #[derive(Component)]
 struct CostDisplay;
-
-/// Marker for the hand display container.
-#[derive(Component)]
-struct HandDisplay;
-
-/// Marker for the opponent hand display container.
-#[derive(Component)]
-struct OpponentHandDisplay;
 
 /// Marker for the deck count display.
 #[derive(Component)]
@@ -116,31 +90,6 @@ struct OpponentHpBar;
 /// Marker for the draw button.
 #[derive(Component)]
 struct DrawButton;
-
-/// Component to track which card in hand this UI element represents.
-#[derive(Component)]
-struct CardButton {
-    hand_index: usize,
-    card_cost: f32,
-}
-
-/// Marker for a local hand card UI entity.
-#[derive(Component)]
-struct LocalHandCard;
-
-/// Marker for an opponent hand card UI entity.
-#[derive(Component)]
-struct OpponentHandCard;
-
-/// Marker for the card cost text (to update affordability color)
-#[derive(Component)]
-struct CardCostText {
-    card_cost: f32,
-}
-
-/// Marker for local hand card cost text.
-#[derive(Component)]
-struct LocalHandCostText;
 
 fn spawn_game_ui(mut commands: Commands) {
     // Main game UI container
@@ -209,35 +158,6 @@ fn spawn_game_ui(mut commands: Commands) {
                                 Text::new("100 / 100"),
                                 TextFont::from_font_size(18.0),
                                 TextColor(Color::WHITE),
-                            ),
-                        ],
-                    ),
-                    // Opponent hand (debug display)
-                    (
-                        Name::new("Opponent Hand Section"),
-                        Node {
-                            flex_direction: FlexDirection::Column,
-                            align_items: AlignItems::Center,
-                            row_gap: px(6),
-                            ..default()
-                        },
-                        children![
-                            (
-                                Text::new("Opponent Hand"),
-                                TextFont::from_font_size(16.0),
-                                TextColor(Color::srgb(0.8, 0.8, 0.8)),
-                            ),
-                            (
-                                Name::new("Opponent Hand Container"),
-                                OpponentHandDisplay,
-                                Node {
-                                    flex_direction: FlexDirection::Row,
-                                    justify_content: JustifyContent::Center,
-                                    column_gap: px(10),
-                                    padding: UiRect::all(px(8)),
-                                    ..default()
-                                },
-                                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.35)),
                             ),
                         ],
                     ),
@@ -354,24 +274,12 @@ fn spawn_game_ui(mut commands: Commands) {
                             ..default()
                         },
                         children![
-                            // Hand container
-                            (
-                                Name::new("Hand Container"),
-                                HandDisplay,
-                                Node {
-                                    flex_direction: FlexDirection::Row,
-                                    justify_content: JustifyContent::Center,
-                                    column_gap: px(10),
-                                    padding: UiRect::all(px(10)),
-                                    ..default()
-                                },
-                                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.5)),
-                            ),
                             // Draw button
                             (
                                 Name::new("Draw Button"),
                                 DrawButton,
                                 Button,
+                                Pickable::default(),
                                 Node {
                                     width: px(100),
                                     height: px(60),
@@ -458,240 +366,6 @@ fn update_health_display(
     }
 }
 
-/// Only rebuild hand displays when hands actually change.
-fn update_hand_display(
-    mut commands: Commands,
-    local_hand_query: Query<&Hand, With<LocalPlayer>>,
-    opponent_hand_query: Query<&Hand, With<Opponent>>,
-    card_registry: Res<CardRegistry>,
-    hand_display_query: Query<Entity, With<HandDisplay>>,
-    opponent_hand_display_query: Query<Entity, With<OpponentHandDisplay>>,
-    local_cards: Query<Entity, With<LocalHandCard>>,
-    opponent_cards: Query<Entity, With<OpponentHandCard>>,
-    mut prev_state: ResMut<PreviousHandState>,
-) {
-    if let (Ok(hand), Ok(hand_container)) = (local_hand_query.single(), hand_display_query.single())
-    {
-        if prev_state.local_cards != hand.cards {
-            prev_state.local_cards = hand.cards.clone();
-            rebuild_local_hand(
-                &mut commands,
-                hand,
-                &card_registry,
-                hand_container,
-                &local_cards,
-            );
-        }
-    }
-
-    if let (Ok(hand), Ok(hand_container)) = (
-        opponent_hand_query.single(),
-        opponent_hand_display_query.single(),
-    ) {
-        if prev_state.opponent_cards != hand.cards {
-            prev_state.opponent_cards = hand.cards.clone();
-            rebuild_opponent_hand(
-                &mut commands,
-                hand,
-                &card_registry,
-                hand_container,
-                &opponent_cards,
-            );
-        }
-    }
-}
-
-fn rebuild_local_hand(
-    commands: &mut Commands,
-    hand: &Hand,
-    card_registry: &CardRegistry,
-    hand_container: Entity,
-    existing_cards: &Query<Entity, With<LocalHandCard>>,
-) {
-    for entity in existing_cards {
-        commands.entity(entity).despawn();
-    }
-
-    for (index, card_id) in hand.cards.iter().enumerate() {
-        let Some(card_def) = card_registry.get(*card_id) else {
-            continue;
-        };
-
-        let key_label = format_key_label(index);
-
-        let card_entity = commands
-            .spawn((
-                Name::new(format!("Card: {}", card_def.name)),
-                LocalHandCard,
-                CardButton {
-                    hand_index: index,
-                    card_cost: card_def.cost,
-                },
-                Button,
-                Node {
-                    width: px(120),
-                    height: px(160),
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
-                    padding: UiRect::all(px(8)),
-                    ..default()
-                },
-                BorderRadius::all(px(8)),
-                BackgroundColor(Color::srgb(0.2, 0.4, 0.6)),
-                children![
-                    // Card name + key
-                    (
-                        Text::new(format!("{} {}", card_def.name, key_label)),
-                        TextFont::from_font_size(12.0),
-                        TextColor(Color::WHITE),
-                    ),
-                    // Card cost
-                    (
-                        CardCostText {
-                            card_cost: card_def.cost
-                        },
-                        LocalHandCostText,
-                        Text::new(format!("Cost: {:.1}", card_def.cost)),
-                        TextFont::from_font_size(12.0),
-                        TextColor(Color::srgb(0.5, 1.0, 0.5)),
-                    ),
-                    // Card effect
-                    (
-                        Text::new(format_effect(&card_def.effect)),
-                        TextFont::from_font_size(11.0),
-                        TextColor(Color::srgb(0.8, 0.8, 0.8)),
-                    ),
-                ],
-            ))
-            .id();
-
-        commands.entity(hand_container).add_child(card_entity);
-    }
-}
-
-fn rebuild_opponent_hand(
-    commands: &mut Commands,
-    hand: &Hand,
-    card_registry: &CardRegistry,
-    hand_container: Entity,
-    existing_cards: &Query<Entity, With<OpponentHandCard>>,
-) {
-    for entity in existing_cards {
-        commands.entity(entity).despawn();
-    }
-
-    for (index, card_id) in hand.cards.iter().enumerate() {
-        let Some(card_def) = card_registry.get(*card_id) else {
-            continue;
-        };
-
-        let key_label = format_key_label(index);
-
-        let card_entity = commands
-            .spawn((
-                Name::new(format!("Opponent Card: {}", card_def.name)),
-                OpponentHandCard,
-                Node {
-                    width: px(120),
-                    height: px(160),
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
-                    padding: UiRect::all(px(8)),
-                    ..default()
-                },
-                BorderRadius::all(px(8)),
-                BackgroundColor(Color::srgb(0.2, 0.2, 0.25)),
-                children![
-                    (
-                        Text::new(format!("{} {}", card_def.name, key_label)),
-                        TextFont::from_font_size(12.0),
-                        TextColor(Color::srgb(0.9, 0.9, 0.9)),
-                    ),
-                    (
-                        Text::new(format!("Cost: {:.1}", card_def.cost)),
-                        TextFont::from_font_size(12.0),
-                        TextColor(Color::srgb(0.8, 0.8, 0.8)),
-                    ),
-                    (
-                        Text::new(format_effect(&card_def.effect)),
-                        TextFont::from_font_size(11.0),
-                        TextColor(Color::srgb(0.7, 0.7, 0.7)),
-                    ),
-                ],
-            ))
-            .id();
-
-        commands.entity(hand_container).add_child(card_entity);
-    }
-}
-
-/// Update card colors based on affordability (without recreating cards)
-fn update_card_affordability(
-    player_query: Query<&Cost, With<LocalPlayer>>,
-    mut card_buttons: Query<(&CardButton, &mut BackgroundColor), With<LocalHandCard>>,
-    mut cost_texts: Query<(&CardCostText, &mut TextColor), With<LocalHandCostText>>,
-) {
-    let Ok(cost) = player_query.single() else {
-        return;
-    };
-
-    // Update card background colors
-    for (card_button, mut bg_color) in &mut card_buttons {
-        let can_afford = cost.can_afford(card_button.card_cost);
-        *bg_color = if can_afford {
-            Color::srgb(0.2, 0.4, 0.6).into()
-        } else {
-            Color::srgb(0.3, 0.3, 0.3).into()
-        };
-    }
-
-    // Update cost text colors
-    for (cost_text, mut text_color) in &mut cost_texts {
-        let can_afford = cost.current >= cost_text.card_cost;
-        *text_color = if can_afford {
-            Color::srgb(0.5, 1.0, 0.5).into()
-        } else {
-            Color::srgb(1.0, 0.5, 0.5).into()
-        };
-    }
-}
-
-fn format_effect(effect: &super::CardEffect) -> String {
-    match effect {
-        super::CardEffect::Damage(dmg) => format!("Dmg: {}", dmg),
-        super::CardEffect::Heal(hp) => format!("Heal: {}", hp),
-        super::CardEffect::Draw(n) => format!("Draw: {}", n),
-    }
-}
-
-fn format_key_label(index: usize) -> String {
-    if index < 9 {
-        format!("[{}]", index + 1)
-    } else if index == 9 {
-        "[0]".to_string()
-    } else {
-        String::new()
-    }
-}
-
-/// Handle clicking on card buttons to play cards.
-fn handle_card_click(
-    mut pending_input: ResMut<PendingInput>,
-    card_buttons: Query<(&Interaction, &CardButton), (Changed<Interaction>, With<LocalHandCard>)>,
-) {
-    for (interaction, card_button) in &card_buttons {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
-
-        if let Some(flag) = card_flag(card_button.hand_index) {
-            pending_input.push_flags(flag);
-        }
-    }
-}
-
 /// Handle clicking on draw button to draw cards.
 fn handle_draw_click(
     mut pending_input: ResMut<PendingInput>,
@@ -702,6 +376,7 @@ fn handle_draw_click(
             continue;
         }
 
+        info!("Draw button clicked! Pushing INPUT_DRAW flag");
         pending_input.push_flags(INPUT_DRAW);
     }
 }

@@ -8,6 +8,8 @@ edition = "2024"
 bevy = { version = "0.17", features = ["bevy_remote"] }
 bevy_ggrs = "0.19"
 bevy_matchbox = { version = "0.13", features = ["ggrs"] }
+bevy_la_mesa = "0.17.0"
+bevy_defer = "0.15"
 serde = { version = "1.0", features = ["derive"] }
 bytemuck = { version = "1.14", features = ["derive"] }
 # Compile out low-severity logs to improve performance.

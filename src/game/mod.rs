@@ -6,6 +6,7 @@ mod deck;
 mod effect;
 mod health;
 mod input_buffer;
+mod mesa;
 mod player;
 mod rules;
 mod ui;
@@ -80,6 +81,7 @@ pub fn plugin(app: &mut App) {
         effect::plugin,
         health::plugin,
         input_buffer::plugin,
+        mesa::plugin,
         player::plugin,
         ui::plugin,
     ));
