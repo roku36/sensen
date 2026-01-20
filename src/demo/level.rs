@@ -93,10 +93,10 @@ fn spawn_level_once(
         ))
         .id();
 
-    // Spawn opponent with 100 HP and a matching deck
+    // Spawn opponent with same HP and a matching deck
     let opponent_entity = commands
         .spawn((
-            OpponentBundle::new(opponent_handle, 1.0, create_test_deck(), 100.0),
+            OpponentBundle::new(opponent_handle, 1.0, create_test_deck()),
             DespawnOnExit(Screen::Gameplay),
         ))
         .id();

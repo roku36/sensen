@@ -1,6 +1,6 @@
 //! Core game systems for Sensen card game.
 
-mod card;
+mod cards;
 mod cost;
 mod deck;
 mod effect;
@@ -9,15 +9,17 @@ mod input_buffer;
 mod mesa;
 mod player;
 mod rules;
+mod status;
 mod ui;
 
-pub use card::*;
+pub use cards::*;
 pub use cost::*;
 pub use deck::*;
 pub use health::*;
 pub use input_buffer::*;
 pub use player::*;
 pub use rules::*;
+pub use status::*;
 
 use bevy::prelude::*;
 use bevy_ggrs::GgrsSchedule;
@@ -76,13 +78,14 @@ pub fn plugin(app: &mut App) {
     );
     app.add_plugins((
         cost::plugin,
-        card::plugin,
+        cards::plugin,
         deck::plugin,
         effect::plugin,
         health::plugin,
         input_buffer::plugin,
         mesa::plugin,
         player::plugin,
+        status::plugin,
         ui::plugin,
     ));
 }

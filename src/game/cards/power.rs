@@ -1,0 +1,177 @@
+//! Power cards - permanent effects that persist for the whole game.
+//!
+//! Card IDs: 200-299
+
+use super::{CardDef, CardEffect, CardId, CardRarity, CardRegistry, CardType};
+
+pub fn register_power_cards(registry: &mut CardRegistry) {
+    // === UNCOMMON POWERS ===
+
+    // 200: Combust - Periodic damage to self and enemies
+    registry.register(CardDef {
+        id: CardId(200),
+        name: "Combust".to_string(),
+        description: "At end of turn, lose 10 HP and deal 50 damage.".to_string(),
+        card_type: CardType::Power,
+        rarity: CardRarity::Uncommon,
+        cost: 1.0,
+        effect: CardEffect::Combust {
+            self_damage: 10.0,
+            enemy_damage: 50.0,
+        },
+    });
+
+    // 201: Dark Embrace - Draw on exhaust
+    registry.register(CardDef {
+        id: CardId(201),
+        name: "Dark Embrace".to_string(),
+        description: "Whenever a card is exhausted, draw 1 card.".to_string(),
+        card_type: CardType::Power,
+        rarity: CardRarity::Uncommon,
+        cost: 2.0,
+        effect: CardEffect::Draw(0), // Effect tracked by Power system
+    });
+
+    // 202: Evolve - Draw on status cards
+    registry.register(CardDef {
+        id: CardId(202),
+        name: "Evolve".to_string(),
+        description: "Whenever you draw a Status, draw 1 card.".to_string(),
+        card_type: CardType::Power,
+        rarity: CardRarity::Uncommon,
+        cost: 1.0,
+        effect: CardEffect::Draw(0), // Effect tracked by Power system
+    });
+
+    // 203: Feel No Pain - Block on exhaust
+    registry.register(CardDef {
+        id: CardId(203),
+        name: "Feel No Pain".to_string(),
+        description: "Whenever a card is exhausted, gain 30 Block.".to_string(),
+        card_type: CardType::Power,
+        rarity: CardRarity::Uncommon,
+        cost: 1.0,
+        effect: CardEffect::Block(0.0), // Effect tracked by Power system
+    });
+
+    // 204: Fire Breathing - Damage on status/curse draw
+    registry.register(CardDef {
+        id: CardId(204),
+        name: "Fire Breathing".to_string(),
+        description: "Whenever you draw a Status or Curse, deal 60 damage.".to_string(),
+        card_type: CardType::Power,
+        rarity: CardRarity::Uncommon,
+        cost: 1.0,
+        effect: CardEffect::Damage(0.0), // Effect tracked by Power system
+    });
+
+    // 205: Inflame - Gain strength
+    registry.register(CardDef {
+        id: CardId(205),
+        name: "Inflame".to_string(),
+        description: "Gain 2 Strength.".to_string(),
+        card_type: CardType::Power,
+        rarity: CardRarity::Uncommon,
+        cost: 1.0,
+        effect: CardEffect::Strength(2.0),
+    });
+
+    // 206: Metallicize - Gain block continuously
+    registry.register(CardDef {
+        id: CardId(206),
+        name: "Metallicize".to_string(),
+        description: "Gain 30 Block per second.".to_string(),
+        card_type: CardType::Power,
+        rarity: CardRarity::Uncommon,
+        cost: 1.0,
+        effect: CardEffect::Metallicize(30.0),
+    });
+
+    // 207: Rupture - Gain strength on self damage
+    registry.register(CardDef {
+        id: CardId(207),
+        name: "Rupture".to_string(),
+        description: "Whenever you lose HP from a card, gain 1 Strength.".to_string(),
+        card_type: CardType::Power,
+        rarity: CardRarity::Uncommon,
+        cost: 1.0,
+        effect: CardEffect::Strength(0.0), // Effect tracked by Power system
+    });
+
+    // === RARE POWERS ===
+
+    // 208: Barricade - Block doesn't decay
+    registry.register(CardDef {
+        id: CardId(208),
+        name: "Barricade".to_string(),
+        description: "Your Block no longer decays over time.".to_string(),
+        card_type: CardType::Power,
+        rarity: CardRarity::Rare,
+        cost: 3.0,
+        effect: CardEffect::Barricade,
+    });
+
+    // 209: Berserk - Gain vulnerability for cost boost
+    registry.register(CardDef {
+        id: CardId(209),
+        name: "Berserk".to_string(),
+        description: "Gain 2 Vulnerable. Gain permanent cost acceleration.".to_string(),
+        card_type: CardType::Power,
+        rarity: CardRarity::Rare,
+        cost: 0.5,
+        effect: CardEffect::Combo(vec![
+            CardEffect::Vulnerable(2.0), // Self-vulnerable
+            CardEffect::Accelerate {
+                bonus_rate: 0.5,
+                duration: 999.0, // Permanent
+            },
+        ]),
+    });
+
+    // 210: Brutality - Draw at start, lose HP
+    registry.register(CardDef {
+        id: CardId(210),
+        name: "Brutality".to_string(),
+        description: "At the start of your turn, lose 10 HP and draw 1 card.".to_string(),
+        card_type: CardType::Power,
+        rarity: CardRarity::Rare,
+        cost: 0.5,
+        effect: CardEffect::Combo(vec![CardEffect::Bloodletting(-10.0), CardEffect::Draw(1)]),
+    });
+
+    // 211: Corruption - Skills cost 0, exhaust
+    registry.register(CardDef {
+        id: CardId(211),
+        name: "Corruption".to_string(),
+        description: "Skills cost 0. Whenever you play a Skill, Exhaust it.".to_string(),
+        card_type: CardType::Power,
+        rarity: CardRarity::Rare,
+        cost: 3.0,
+        effect: CardEffect::Accelerate {
+            bonus_rate: 0.0,
+            duration: 0.0,
+        }, // Effect tracked by Power system
+    });
+
+    // 212: Demon Form - Gain strength over time
+    registry.register(CardDef {
+        id: CardId(212),
+        name: "Demon Form".to_string(),
+        description: "Gain 2 Strength per second.".to_string(),
+        card_type: CardType::Power,
+        rarity: CardRarity::Rare,
+        cost: 3.0,
+        effect: CardEffect::DemonForm(2.0),
+    });
+
+    // 213: Juggernaut - Deal damage when gaining block
+    registry.register(CardDef {
+        id: CardId(213),
+        name: "Juggernaut".to_string(),
+        description: "Whenever you gain Block, deal 50 damage.".to_string(),
+        card_type: CardType::Power,
+        rarity: CardRarity::Rare,
+        cost: 2.0,
+        effect: CardEffect::Juggernaut(50.0),
+    });
+}

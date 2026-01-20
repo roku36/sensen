@@ -741,12 +741,23 @@ fn mesa_card_from_id(card_id: CardId, registry: &CardRegistry) -> MesaCard {
     let front = registry
         .get(card_id)
         .map(|def| match primary_effect(&def.effect) {
-            CardEffect::Damage(_) => CARD_FRONT_DAMAGE,
+            CardEffect::Damage(_) | CardEffect::MultiHit { .. } => CARD_FRONT_DAMAGE,
             CardEffect::Heal(_) => CARD_FRONT_HEAL,
             CardEffect::Draw(_) => CARD_FRONT_DRAW,
-            CardEffect::Block(_) => CARD_FRONT_HEAL,
+            CardEffect::Block(_) | CardEffect::DoubleBlock => CARD_FRONT_HEAL,
             CardEffect::Thorns(_) => CARD_FRONT_DAMAGE,
+            CardEffect::Strength(_) | CardEffect::DoubleStrength | CardEffect::DemonForm(_) => {
+                CARD_FRONT_DAMAGE
+            }
+            CardEffect::Vulnerable(_) | CardEffect::Weak(_) => CARD_FRONT_DAMAGE,
             CardEffect::Accelerate { .. } => CARD_FRONT_DRAW,
+            CardEffect::BodySlam => CARD_FRONT_DAMAGE,
+            CardEffect::Bloodletting(_) => CARD_FRONT_DAMAGE,
+            CardEffect::Rage(_) | CardEffect::Metallicize(_) | CardEffect::Barricade => {
+                CARD_FRONT_HEAL
+            }
+            CardEffect::Combust { .. } | CardEffect::Juggernaut(_) => CARD_FRONT_DAMAGE,
+            CardEffect::Exhaust | CardEffect::AddStatus(_) => CARD_FRONT_DRAW,
             CardEffect::Combo(_) => CARD_FRONT_DAMAGE,
         })
         .unwrap_or(CARD_FRONT_DAMAGE)
@@ -792,12 +803,27 @@ fn primary_effect(effect: &CardEffect) -> &CardEffect {
 
 fn unified_effect_kind(effect: &CardEffect) -> Option<EffectKind> {
     match effect {
-        CardEffect::Damage(_) => Some(EffectKind::Damage),
+        CardEffect::Damage(_) | CardEffect::MultiHit { .. } | CardEffect::BodySlam => {
+            Some(EffectKind::Damage)
+        }
         CardEffect::Heal(_) => Some(EffectKind::Heal),
         CardEffect::Draw(_) => Some(EffectKind::Draw),
-        CardEffect::Block(_) => Some(EffectKind::Block),
+        CardEffect::Block(_) | CardEffect::DoubleBlock => Some(EffectKind::Block),
         CardEffect::Thorns(_) => Some(EffectKind::Thorns),
         CardEffect::Accelerate { .. } => Some(EffectKind::Accelerate),
+        CardEffect::Strength(_)
+        | CardEffect::DoubleStrength
+        | CardEffect::DemonForm(_)
+        | CardEffect::Vulnerable(_)
+        | CardEffect::Weak(_)
+        | CardEffect::Bloodletting(_)
+        | CardEffect::Rage(_)
+        | CardEffect::Metallicize(_)
+        | CardEffect::Combust { .. }
+        | CardEffect::Barricade
+        | CardEffect::Juggernaut(_)
+        | CardEffect::Exhaust
+        | CardEffect::AddStatus(_) => None,
         CardEffect::Combo(effects) => {
             let mut kind = None;
             for effect in effects {
@@ -822,14 +848,39 @@ fn unified_effect_kind(effect: &CardEffect) -> Option<EffectKind> {
 fn effect_lines(effect: &CardEffect, lines: &mut Vec<String>) {
     match effect {
         CardEffect::Damage(amount) => lines.push(format!("DMG {:.0}", amount)),
+        CardEffect::MultiHit { damage, hits } => lines.push(format!("DMG {:.0}x{}", damage, hits)),
         CardEffect::Heal(amount) => lines.push(format!("HEAL {:.0}", amount)),
         CardEffect::Draw(count) => lines.push(format!("DRAW {}", count)),
         CardEffect::Block(amount) => lines.push(format!("BLOCK {:.0}", amount)),
         CardEffect::Thorns(amount) => lines.push(format!("THORNS {:.0}", amount)),
+        CardEffect::Strength(amount) => lines.push(format!("STR +{:.0}", amount)),
+        CardEffect::Vulnerable(duration) => lines.push(format!("VULN {:.0}s", duration)),
+        CardEffect::Weak(duration) => lines.push(format!("WEAK {:.0}s", duration)),
         CardEffect::Accelerate {
             bonus_rate,
             duration,
         } => lines.push(format!("ACCEL +{:.1}/s {:.0}s", bonus_rate, duration)),
+        CardEffect::BodySlam => lines.push("BODY SLAM".to_string()),
+        CardEffect::Bloodletting(amount) => {
+            if *amount < 0.0 {
+                lines.push(format!("LOSE {:.0} HP", -amount));
+            } else {
+                lines.push(format!("GAIN {:.0} HP", amount));
+            }
+        }
+        CardEffect::DoubleBlock => lines.push("x2 BLOCK".to_string()),
+        CardEffect::DoubleStrength => lines.push("x2 STR".to_string()),
+        CardEffect::Rage(block) => lines.push(format!("RAGE {:.0}", block)),
+        CardEffect::Metallicize(block) => lines.push(format!("METAL {:.0}/s", block)),
+        CardEffect::Combust {
+            self_damage,
+            enemy_damage,
+        } => lines.push(format!("COMBUST -{:.0}/+{:.0}", self_damage, enemy_damage)),
+        CardEffect::DemonForm(str_per_sec) => lines.push(format!("DEMON +{:.0}STR/s", str_per_sec)),
+        CardEffect::Barricade => lines.push("BARRICADE".to_string()),
+        CardEffect::Juggernaut(dmg) => lines.push(format!("JUGG {:.0}", dmg)),
+        CardEffect::Exhaust => lines.push("EXHAUST".to_string()),
+        CardEffect::AddStatus(_) => lines.push("+STATUS".to_string()),
         CardEffect::Combo(effects) => {
             for effect in effects {
                 effect_lines(effect, lines);
@@ -869,7 +920,7 @@ fn add_effect_text_to_cards(
             continue;
         };
 
-        // Build effect text
+        // Build effect text (short version for card display)
         let mut lines = Vec::new();
         effect_lines(&card_def.effect, &mut lines);
         let effect_text = if lines.is_empty() {
@@ -878,7 +929,8 @@ fn add_effect_text_to_cards(
             lines.join("\n")
         };
 
-        let cost_text = format!("{:.0}", card_def.cost);
+        let cost_text = format!("{:.1}", card_def.cost);
+        let name_text = card_def.name.clone();
 
         // Determine color based on effect type
         let effect_color = effect_color(&card_def.effect);
@@ -887,46 +939,67 @@ fn add_effect_text_to_cards(
 
         // Add effect text as a child entity (positioned on top of the card front face)
         commands.entity(entity).with_children(|parent| {
-            // Effect text (center of card)
+            // Card name (top of card)
             parent.spawn((
-                Name::new("Card Effect Text"),
-                Text3d::new(effect_text),
+                Name::new("Card Name Text"),
+                Text3d::new(name_text),
                 Text3dStyling {
-                    size: 32.0,
-                    color: effect_color,
-                    stroke: NonZeroU32::new(3),
+                    size: 16.0,
+                    color: Srgba::WHITE,
+                    stroke: NonZeroU32::new(2),
                     stroke_color: Srgba::BLACK,
                     align: TextAlign::Center,
                     anchor: TextAnchor::CENTER,
-                    line_height: 0.9,
-                    world_scale: Some(Vec2::splat(0.6)),
+                    world_scale: Some(Vec2::splat(0.25)),
                     layer_offset: 0.001,
                     ..default()
                 },
                 Mesh3d::default(),
                 MeshMaterial3d(text_material.clone()),
-                Transform::from_xyz(0.0, CARD_TEXT_LIFT, 0.0)
+                Transform::from_xyz(0.0, CARD_TEXT_LIFT, -1.0)
                     .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
             ));
 
-            // Cost text (top left corner)
+            // Effect text (center of card) - smaller font
+            parent.spawn((
+                Name::new("Card Effect Text"),
+                Text3d::new(effect_text),
+                Text3dStyling {
+                    size: 14.0,
+                    color: effect_color,
+                    stroke: NonZeroU32::new(2),
+                    stroke_color: Srgba::BLACK,
+                    align: TextAlign::Center,
+                    anchor: TextAnchor::CENTER,
+                    line_height: 0.85,
+                    world_scale: Some(Vec2::splat(0.25)),
+                    layer_offset: 0.001,
+                    ..default()
+                },
+                Mesh3d::default(),
+                MeshMaterial3d(text_material.clone()),
+                Transform::from_xyz(0.0, CARD_TEXT_LIFT, 0.3)
+                    .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+            ));
+
+            // Cost text (top left corner) - smaller
             parent.spawn((
                 Name::new("Card Cost Text"),
                 Text3d::new(cost_text),
                 Text3dStyling {
-                    size: 24.0,
+                    size: 18.0,
                     color: Srgba::rgb(1.0, 0.9, 0.2),
                     stroke: NonZeroU32::new(2),
                     stroke_color: Srgba::BLACK,
                     align: TextAlign::Center,
                     anchor: TextAnchor::CENTER,
-                    world_scale: Some(Vec2::splat(0.35)),
+                    world_scale: Some(Vec2::splat(0.2)),
                     layer_offset: 0.001,
                     ..default()
                 },
                 Mesh3d::default(),
                 MeshMaterial3d(text_material.clone()),
-                Transform::from_xyz(-0.9, CARD_TEXT_LIFT, -1.3)
+                Transform::from_xyz(-0.85, CARD_TEXT_LIFT, -1.25)
                     .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
             ));
         });
