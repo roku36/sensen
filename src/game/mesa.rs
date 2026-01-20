@@ -940,11 +940,11 @@ fn fan_hand_layout(
             let local_offset = Vec3::new(
                 angle.sin() * HAND_FAN_RADIUS,
                 0.0,
-                angle.cos() * HAND_FAN_RADIUS - HAND_FAN_RADIUS,
+                HAND_FAN_RADIUS - angle.cos() * HAND_FAN_RADIUS,
             );
             let world_offset = hand_transform.rotation * local_offset;
             let translation = hand_transform.translation + world_offset;
-            let rotation = hand_transform.rotation * Quat::from_rotation_y(angle);
+            let rotation = hand_transform.rotation * Quat::from_rotation_y(-angle);
             targets.push((*entity, translation, rotation));
         }
 
