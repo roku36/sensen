@@ -1,13 +1,16 @@
 //! 3D card table rendering with bevy_la_mesa.
 
 use bevy::{color::Srgba, prelude::*, render::alpha::AlphaMode, transform::TransformSystems};
-use bevy_la_mesa::events::{AlignCardsInHand, CardPress, DrawToHand, PlaceCardOnTable, RenderDeck};
+use bevy_la_mesa::events::{
+    AlignCardsInHand, CardHover, CardOut, CardPress, DrawToHand, PlaceCardOnTable, RenderDeck,
+};
 use bevy_la_mesa::{
     Card as MesaCardComponent, CardMetadata, Deck as MesaDeck, DeckArea, Hand as MesaHand,
     HandArea, LaMesaPlugin, LaMesaPluginSettings, PlayArea,
 };
 use bevy_rich_text3d::{Text3d, Text3dStyling, TextAlign, TextAnchor, TextAtlas};
-use std::num::NonZeroU32;
+use bevy_tweening::TweenAnim;
+use std::{cmp::Ordering, num::NonZeroU32};
 
 use super::{
     CardEffect, CardId, CardRegistry, Deck, DeckReshuffledMessage, GameResult, Hand, LocalPlayer,
@@ -22,10 +25,8 @@ struct CardEffectTextAdded;
 #[derive(Resource, Clone)]
 struct CardTextMaterial(Handle<StandardMaterial>);
 
-#[derive(Component, Default)]
-struct OpponentHandMirror {
-    last_mirrored_x: Option<f32>,
-}
+#[derive(Component)]
+struct HoveredCard;
 
 const LOCAL_PLAYER_INDEX: usize = 1;
 const OPPONENT_PLAYER_INDEX: usize = 2;
@@ -34,6 +35,14 @@ const CARD_BACK_IMAGE: &str = "images/splash.png";
 const CARD_FRONT_DAMAGE: &str = "images/ducky.png";
 const CARD_FRONT_HEAL: &str = "images/ducky.png";
 const CARD_FRONT_DRAW: &str = "images/ducky.png";
+const HAND_FAN_RADIUS: f32 = 12.0;
+const HAND_FAN_MAX_SPAN: f32 = 10.0;
+const HAND_FAN_BASE_STEP: f32 = 0.15;
+const HAND_FAN_MAX_ANGLE: f32 = 1.2;
+const HAND_LAYER_STEP: f32 = 0.01;
+const HAND_TILT_STEP: f32 = 0.004;
+const HAND_HOVER_LIFT: f32 = 0.35;
+const CARD_TEXT_LIFT: f32 = 0.002;
 
 #[derive(Clone, Debug)]
 struct MesaCard {
@@ -172,6 +181,7 @@ pub fn plugin(app: &mut App) {
             sync_hand_to_mesa,
             sync_played_cards,
             add_effect_text_to_cards,
+            track_hand_hover,
         )
             .chain()
             .in_set(AppSystems::Update)
@@ -179,7 +189,7 @@ pub fn plugin(app: &mut App) {
     );
     app.add_systems(
         PostUpdate,
-        mirror_opponent_hand_positions
+        fan_hand_layout
             .before(TransformSystems::Propagate)
             .run_if(in_state(Screen::Gameplay)),
     );
@@ -554,6 +564,7 @@ fn handle_card_press_input(
     cards_in_hand: Query<(Entity, &MesaHand, &MesaCardComponent<MesaCard>, &Transform)>,
     parents: Query<&ChildOf>,
     local_hand_query: Query<&Hand, With<LocalPlayer>>,
+    hand_map: Res<MesaHandMap>,
     mut pending: ResMut<PendingInput>,
 ) {
     for press in card_press.read() {
@@ -581,23 +592,12 @@ fn handle_card_press_input(
             continue;
         };
 
-        // Get all cards in the local player's hand, sorted by x position (left to right)
-        let mut local_hand_cards: Vec<_> = cards_in_hand
-            .iter()
-            .filter(|(_, h, _, _)| h.player == LOCAL_PLAYER_INDEX)
-            .collect();
-        local_hand_cards.sort_by(|a, b| {
-            a.3.translation
-                .x
-                .partial_cmp(&b.3.translation.x)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        let Some(local_hand_cards) = hand_map.hand(LOCAL_PLAYER_INDEX) else {
+            continue;
+        };
 
-        // Find the index of the pressed card
-        let Some(index) = local_hand_cards
-            .iter()
-            .position(|(e, _, _, _)| *e == card_entity)
-        else {
+        // Find the index of the pressed card based on the game-logic order
+        let Some(index) = local_hand_cards.iter().position(|e| *e == card_entity) else {
             continue;
         };
 
@@ -636,6 +636,43 @@ fn resolve_pressed_card_entity(
             return None;
         };
         current = child_of.parent();
+    }
+}
+
+fn track_hand_hover(
+    mut commands: Commands,
+    mut hover: MessageReader<CardHover>,
+    mut out: MessageReader<CardOut>,
+    cards_in_hand: Query<(Entity, &MesaHand, &MesaCardComponent<MesaCard>, &Transform)>,
+    parents: Query<&ChildOf>,
+) {
+    for event in hover.read() {
+        let Some(card_entity) = resolve_pressed_card_entity(event.entity, &cards_in_hand, &parents)
+        else {
+            continue;
+        };
+        let Ok((_, hand, _, _)) = cards_in_hand.get(card_entity) else {
+            continue;
+        };
+        if hand.player != LOCAL_PLAYER_INDEX {
+            continue;
+        }
+
+        commands
+            .entity(card_entity)
+            .insert(HoveredCard)
+            .remove::<TweenAnim>();
+    }
+
+    for event in out.read() {
+        let Some(card_entity) = resolve_pressed_card_entity(event.entity, &cards_in_hand, &parents)
+        else {
+            continue;
+        };
+        commands
+            .entity(card_entity)
+            .remove::<HoveredCard>()
+            .remove::<TweenAnim>();
     }
 }
 
@@ -777,20 +814,20 @@ fn add_effect_text_to_cards(
                 Name::new("Card Effect Text"),
                 Text3d::new(effect_text),
                 Text3dStyling {
-                    size: 64.0,
+                    size: 32.0,
                     color: effect_color,
-                    stroke: NonZeroU32::new(6),
+                    stroke: NonZeroU32::new(3),
                     stroke_color: Srgba::BLACK,
                     align: TextAlign::Center,
                     anchor: TextAnchor::CENTER,
                     line_height: 0.9,
-                    world_scale: Some(Vec2::splat(1.2)),
+                    world_scale: Some(Vec2::splat(0.6)),
                     layer_offset: 0.001,
                     ..default()
                 },
                 Mesh3d::default(),
                 MeshMaterial3d(text_material.clone()),
-                Transform::from_xyz(0.0, 0.02, 0.0)
+                Transform::from_xyz(0.0, CARD_TEXT_LIFT, 0.0)
                     .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
             ));
 
@@ -799,19 +836,19 @@ fn add_effect_text_to_cards(
                 Name::new("Card Cost Text"),
                 Text3d::new(cost_text),
                 Text3dStyling {
-                    size: 48.0,
+                    size: 24.0,
                     color: Srgba::rgb(1.0, 0.9, 0.2),
-                    stroke: NonZeroU32::new(5),
+                    stroke: NonZeroU32::new(2),
                     stroke_color: Srgba::BLACK,
                     align: TextAlign::Center,
                     anchor: TextAnchor::CENTER,
-                    world_scale: Some(Vec2::splat(0.7)),
+                    world_scale: Some(Vec2::splat(0.35)),
                     layer_offset: 0.001,
                     ..default()
                 },
                 Mesh3d::default(),
                 MeshMaterial3d(text_material.clone()),
-                Transform::from_xyz(-0.9, 0.02, -1.3)
+                Transform::from_xyz(-0.9, CARD_TEXT_LIFT, -1.3)
                     .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
             ));
         });
@@ -831,57 +868,118 @@ fn tag_mesa_cards_for_cleanup(
     }
 }
 
-fn mirror_opponent_hand_positions(
-    mut commands: Commands,
+fn fan_hand_layout(
     hand_areas: Query<(&HandArea, &Transform)>,
-    mut cards: Query<
-        (
-            Entity,
-            &MesaHand,
-            &mut Transform,
-            &mut MesaCardComponent<MesaCard>,
-            Option<&mut OpponentHandMirror>,
-        ),
-        Without<HandArea>,
-    >,
+    camera_query: Query<&GlobalTransform, With<Camera3d>>,
+    hand_map: Res<MesaHandMap>,
+    mut cards: ParamSet<(
+        Query<(Entity, &MesaHand, &Transform), Without<HandArea>>,
+        Query<
+            (
+                Entity,
+                &MesaHand,
+                &mut Transform,
+                &mut MesaCardComponent<MesaCard>,
+                Option<&TweenAnim>,
+                Option<&HoveredCard>,
+            ),
+            Without<HandArea>,
+        >,
+    )>,
 ) {
-    let Some((_, hand_transform)) = hand_areas
+    let camera_position = camera_query
         .iter()
-        .find(|(area, _)| area.player == OPPONENT_PLAYER_INDEX)
-    else {
-        return;
-    };
-    let center_x = hand_transform.translation.x;
+        .next()
+        .map(|transform| transform.translation())
+        .unwrap_or(Vec3::ZERO);
 
-    for (entity, hand, mut transform, mut card, mirror_state) in &mut cards {
-        if hand.player != OPPONENT_PLAYER_INDEX {
-            continue;
-        }
-
-        let already_mirrored = mirror_state
-            .as_ref()
-            .and_then(|state| state.last_mirrored_x)
-            .map(|last_x| (transform.translation.x - last_x).abs() < 1e-4)
-            .unwrap_or(false);
-        if already_mirrored {
-            continue;
-        }
-
-        let offset = transform.translation.x - center_x;
-        let new_x = center_x - offset;
-
-        transform.translation.x = new_x;
-        if let Some(base_transform) = card.transform.as_mut() {
-            let base_offset = base_transform.translation.x - center_x;
-            base_transform.translation.x = center_x - base_offset;
-        }
-
-        if let Some(mut state) = mirror_state {
-            state.last_mirrored_x = Some(new_x);
-        } else {
-            commands.entity(entity).insert(OpponentHandMirror {
-                last_mirrored_x: Some(new_x),
+    for (hand_area, hand_transform) in &hand_areas {
+        let mut hand_cards: Vec<Entity> = hand_map
+            .hand(hand_area.player)
+            .map(|order| {
+                order
+                    .iter()
+                    .filter_map(|entity| cards.p0().get(*entity).ok().map(|_| *entity))
+                    .collect()
+            })
+            .unwrap_or_else(|| {
+                let mut collected: Vec<(Entity, f32)> = cards
+                    .p0()
+                    .iter()
+                    .filter(|(_, hand, _)| hand.player == hand_area.player)
+                    .map(|(entity, _, transform)| (entity, transform.translation.x))
+                    .collect();
+                collected.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
+                collected.into_iter().map(|(entity, _)| entity).collect()
             });
+
+        if hand_cards.is_empty() {
+            continue;
+        }
+
+        if hand_area.player == OPPONENT_PLAYER_INDEX {
+            hand_cards.reverse();
+        }
+
+        let card_count = hand_cards.len();
+        let desired_angle = HAND_FAN_BASE_STEP * (card_count.saturating_sub(1) as f32);
+        let span_ratio = (HAND_FAN_MAX_SPAN * 0.5 / HAND_FAN_RADIUS).clamp(0.0, 1.0);
+        let max_angle_from_span = 2.0 * span_ratio.asin();
+        let fan_angle = desired_angle
+            .min(max_angle_from_span)
+            .min(HAND_FAN_MAX_ANGLE);
+        let angle_step = if card_count > 1 {
+            fan_angle / (card_count as f32 - 1.0)
+        } else {
+            0.0
+        };
+
+        let mut targets = Vec::with_capacity(card_count);
+        for (index, entity) in hand_cards.iter().enumerate() {
+            let angle = -fan_angle * 0.5 + angle_step * index as f32;
+            let local_offset = Vec3::new(
+                angle.sin() * HAND_FAN_RADIUS,
+                0.0,
+                angle.cos() * HAND_FAN_RADIUS - HAND_FAN_RADIUS,
+            );
+            let world_offset = hand_transform.rotation * local_offset;
+            let translation = hand_transform.translation + world_offset;
+            let rotation = hand_transform.rotation * Quat::from_rotation_y(angle);
+            targets.push((*entity, translation, rotation));
+        }
+
+        let to_camera = (camera_position - hand_transform.translation).normalize_or_zero();
+        let stack_direction = if to_camera.length_squared() > 0.0 {
+            to_camera
+        } else {
+            hand_transform.rotation * Vec3::Y
+        };
+
+        targets.sort_by(|a, b| a.1.x.partial_cmp(&b.1.x).unwrap_or(Ordering::Equal));
+
+        for (rank, (entity, translation, rotation)) in targets.into_iter().enumerate() {
+            let layered_translation =
+                translation + stack_direction * (rank as f32 * HAND_LAYER_STEP);
+            let tilt = (rank as f32 - (card_count as f32 - 1.0) * 0.5) * HAND_TILT_STEP;
+            let final_rotation = rotation * Quat::from_rotation_x(tilt);
+            if let Ok((_, _, mut transform, mut card, tween, hovered)) = cards.p1().get_mut(entity)
+            {
+                let base_transform = Transform {
+                    translation: layered_translation,
+                    rotation: final_rotation,
+                    scale: transform.scale,
+                };
+                card.transform = Some(base_transform);
+                let hover_offset = if hovered.is_some() {
+                    stack_direction * HAND_HOVER_LIFT
+                } else {
+                    Vec3::ZERO
+                };
+                if tween.is_none() {
+                    transform.translation = layered_translation + hover_offset;
+                    transform.rotation = final_rotation;
+                }
+            }
         }
     }
 }

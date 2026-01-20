@@ -5829,6 +5829,7 @@ dependencies = [
  "bevy_la_mesa",
  "bevy_matchbox",
  "bevy_rich_text3d",
+ "bevy_tweening",
  "bytemuck",
  "getrandom 0.3.3",
  "serde",
