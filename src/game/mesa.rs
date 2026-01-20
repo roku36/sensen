@@ -2,7 +2,7 @@
 
 use bevy::{color::Srgba, prelude::*, render::alpha::AlphaMode, transform::TransformSystems};
 use bevy_la_mesa::events::{
-    AlignCardsInHand, CardHover, CardOut, CardPress, DrawToHand, PlaceCardOnTable, RenderDeck,
+    AlignCardsInHand, CardHover, CardOut, CardPress, DiscardCardToDeck, DrawToHand, RenderDeck,
 };
 use bevy_la_mesa::{
     Card as MesaCardComponent, CardMetadata, Deck as MesaDeck, DeckArea, Hand as MesaHand,
@@ -164,7 +164,7 @@ pub fn plugin(app: &mut App) {
     app.clear_messages_on_exit::<CardPress>(Screen::Gameplay)
         .clear_messages_on_exit::<RenderDeck<MesaCard>>(Screen::Gameplay)
         .clear_messages_on_exit::<DrawToHand>(Screen::Gameplay)
-        .clear_messages_on_exit::<PlaceCardOnTable>(Screen::Gameplay)
+        .clear_messages_on_exit::<DiscardCardToDeck>(Screen::Gameplay)
         .clear_messages_on_exit::<AlignCardsInHand>(Screen::Gameplay);
 
     app.add_systems(
@@ -523,7 +523,7 @@ fn sync_played_cards(
     opponent_query: Query<Entity, With<Opponent>>,
     scene: Res<MesaScene>,
     mut hand_map: ResMut<MesaHandMap>,
-    mut place_card: MessageWriter<PlaceCardOnTable>,
+    mut discard_card: MessageWriter<DiscardCardToDeck>,
     mut align_hand: MessageWriter<AlignCardsInHand>,
     children_query: Query<&Children>,
     mut commands: Commands,
@@ -543,11 +543,10 @@ fn sync_played_cards(
         }
 
         let card_entity = hand.remove(message.hand_index);
-        if let Some(marker) = scene.play_marker_for(player_index) {
-            place_card.write(PlaceCardOnTable {
+        if let Some(deck_entity) = scene.deck_for(player_index) {
+            discard_card.write(DiscardCardToDeck {
                 card_entity,
-                marker,
-                player: player_index,
+                deck_entity,
             });
         } else {
             despawn_entity_recursive(card_entity, &children_query, &mut commands);
@@ -741,10 +740,14 @@ fn despawn_entity_recursive(
 fn mesa_card_from_id(card_id: CardId, registry: &CardRegistry) -> MesaCard {
     let front = registry
         .get(card_id)
-        .map(|def| match def.effect {
+        .map(|def| match primary_effect(&def.effect) {
             CardEffect::Damage(_) => CARD_FRONT_DAMAGE,
             CardEffect::Heal(_) => CARD_FRONT_HEAL,
             CardEffect::Draw(_) => CARD_FRONT_DRAW,
+            CardEffect::Block(_) => CARD_FRONT_HEAL,
+            CardEffect::Thorns(_) => CARD_FRONT_DAMAGE,
+            CardEffect::Accelerate { .. } => CARD_FRONT_DRAW,
+            CardEffect::Combo(_) => CARD_FRONT_DAMAGE,
         })
         .unwrap_or(CARD_FRONT_DAMAGE)
         .to_string();
@@ -770,6 +773,83 @@ fn player_index_for_entity(
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EffectKind {
+    Damage,
+    Heal,
+    Draw,
+    Block,
+    Thorns,
+    Accelerate,
+}
+
+fn primary_effect(effect: &CardEffect) -> &CardEffect {
+    match effect {
+        CardEffect::Combo(effects) => effects.first().map(primary_effect).unwrap_or(effect),
+        _ => effect,
+    }
+}
+
+fn unified_effect_kind(effect: &CardEffect) -> Option<EffectKind> {
+    match effect {
+        CardEffect::Damage(_) => Some(EffectKind::Damage),
+        CardEffect::Heal(_) => Some(EffectKind::Heal),
+        CardEffect::Draw(_) => Some(EffectKind::Draw),
+        CardEffect::Block(_) => Some(EffectKind::Block),
+        CardEffect::Thorns(_) => Some(EffectKind::Thorns),
+        CardEffect::Accelerate { .. } => Some(EffectKind::Accelerate),
+        CardEffect::Combo(effects) => {
+            let mut kind = None;
+            for effect in effects {
+                let next = unified_effect_kind(effect);
+                if next.is_none() {
+                    return None;
+                }
+                let next = next.unwrap();
+                if let Some(existing) = kind {
+                    if existing != next {
+                        return None;
+                    }
+                } else {
+                    kind = Some(next);
+                }
+            }
+            kind
+        }
+    }
+}
+
+fn effect_lines(effect: &CardEffect, lines: &mut Vec<String>) {
+    match effect {
+        CardEffect::Damage(amount) => lines.push(format!("DMG {:.0}", amount)),
+        CardEffect::Heal(amount) => lines.push(format!("HEAL {:.0}", amount)),
+        CardEffect::Draw(count) => lines.push(format!("DRAW {}", count)),
+        CardEffect::Block(amount) => lines.push(format!("BLOCK {:.0}", amount)),
+        CardEffect::Thorns(amount) => lines.push(format!("THORNS {:.0}", amount)),
+        CardEffect::Accelerate {
+            bonus_rate,
+            duration,
+        } => lines.push(format!("ACCEL +{:.1}/s {:.0}s", bonus_rate, duration)),
+        CardEffect::Combo(effects) => {
+            for effect in effects {
+                effect_lines(effect, lines);
+            }
+        }
+    }
+}
+
+fn effect_color(effect: &CardEffect) -> Srgba {
+    match unified_effect_kind(effect) {
+        Some(EffectKind::Damage) => Srgba::rgb(1.0, 0.3, 0.3),
+        Some(EffectKind::Heal) => Srgba::rgb(0.3, 1.0, 0.3),
+        Some(EffectKind::Draw) => Srgba::rgb(0.3, 0.5, 1.0),
+        Some(EffectKind::Block) => Srgba::rgb(0.3, 0.8, 1.0),
+        Some(EffectKind::Thorns) => Srgba::rgb(1.0, 0.6, 0.2),
+        Some(EffectKind::Accelerate) => Srgba::rgb(1.0, 0.9, 0.2),
+        None => Srgba::rgb(0.9, 0.9, 0.9),
+    }
+}
+
 /// Add effect text to cards that don't have it yet.
 fn add_effect_text_to_cards(
     mut commands: Commands,
@@ -790,20 +870,18 @@ fn add_effect_text_to_cards(
         };
 
         // Build effect text
-        let effect_text = match &card_def.effect {
-            CardEffect::Damage(amount) => format!("DMG\n{:.0}", amount),
-            CardEffect::Heal(amount) => format!("HEAL\n{:.0}", amount),
-            CardEffect::Draw(count) => format!("DRAW\n{}", count),
+        let mut lines = Vec::new();
+        effect_lines(&card_def.effect, &mut lines);
+        let effect_text = if lines.is_empty() {
+            "???".to_string()
+        } else {
+            lines.join("\n")
         };
 
         let cost_text = format!("{:.0}", card_def.cost);
 
         // Determine color based on effect type
-        let effect_color = match &card_def.effect {
-            CardEffect::Damage(_) => Srgba::rgb(1.0, 0.3, 0.3),
-            CardEffect::Heal(_) => Srgba::rgb(0.3, 1.0, 0.3),
-            CardEffect::Draw(_) => Srgba::rgb(0.3, 0.5, 1.0),
-        };
+        let effect_color = effect_color(&card_def.effect);
 
         commands.entity(entity).insert(CardEffectTextAdded);
 

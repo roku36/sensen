@@ -28,7 +28,14 @@ pub enum CardEffect {
     Heal(f32),
     /// Draw cards
     Draw(u32),
-    // More effects can be added later
+    /// Gain block (reduces incoming damage)
+    Block(f32),
+    /// Gain thorns (reflect damage when hit)
+    Thorns(f32),
+    /// Temporarily increase cost generation rate
+    Accelerate { bonus_rate: f32, duration: f32 },
+    /// Apply multiple effects in sequence
+    Combo(Vec<CardEffect>),
 }
 
 /// Registry of all card definitions.

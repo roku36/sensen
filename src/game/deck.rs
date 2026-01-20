@@ -229,19 +229,19 @@ fn handle_draw_cards(
     }
 }
 
-/// System to handle playing a card from hand to discard pile.
+/// System to handle playing a card from hand back into the deck.
 fn handle_play_card(
     mut messages: MessageReader<PlayCardMessage>,
-    mut query: Query<(&mut Hand, &mut DiscardPile)>,
+    mut query: Query<(&mut Hand, &mut Deck)>,
     mut card_played_messages: MessageWriter<CardPlayedMessage>,
 ) {
     for msg in messages.read() {
-        let Ok((mut hand, mut discard)) = query.get_mut(msg.player) else {
+        let Ok((mut hand, mut deck)) = query.get_mut(msg.player) else {
             continue;
         };
 
         if let Some(card_id) = hand.remove_card(msg.hand_index) {
-            discard.add_card(card_id);
+            deck.add_cards(vec![card_id]);
             // Fire message to apply card effect
             card_played_messages.write(CardPlayedMessage {
                 player: msg.player,

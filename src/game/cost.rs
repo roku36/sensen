@@ -12,14 +12,16 @@ use crate::{
 pub fn plugin(app: &mut App) {
     app.add_systems(
         Update,
-        accumulate_cost
+        (tick_acceleration, accumulate_cost)
+            .chain()
             .in_set(AppSystems::TickTimers)
             .run_if(is_offline)
             .run_if(in_state(Screen::Gameplay)),
     );
     app.add_systems(
         GgrsSchedule,
-        accumulate_cost
+        (tick_acceleration, accumulate_cost)
+            .chain()
             .in_set(GameplaySystems::Tick)
             .run_if(is_online)
             .run_if(in_state(Screen::Gameplay)),
@@ -58,10 +60,47 @@ impl Cost {
     }
 }
 
+/// Temporary cost rate bonus.
+#[derive(Component, Debug, Default, Clone, Reflect)]
+#[reflect(Component)]
+pub struct Acceleration {
+    pub bonus_rate: f32,
+    pub remaining: f32,
+}
+
+impl Acceleration {
+    pub fn new(bonus_rate: f32, duration: f32) -> Self {
+        Self {
+            bonus_rate,
+            remaining: duration.max(0.0),
+        }
+    }
+
+    pub fn extend(&mut self, bonus_rate: f32, duration: f32) {
+        self.bonus_rate += bonus_rate;
+        self.remaining = self.remaining.max(duration);
+    }
+}
+
 /// System that accumulates cost over time for all entities with Cost component.
 fn accumulate_cost(time: Res<Time>, mut query: Query<&mut Cost>) {
     let delta = time.delta_secs();
     for mut cost in &mut query {
         cost.current += cost.rate * delta;
+    }
+}
+
+fn tick_acceleration(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut Cost, &mut Acceleration)>,
+) {
+    let delta = time.delta_secs();
+    for (entity, mut cost, mut accel) in &mut query {
+        accel.remaining -= delta;
+        if accel.remaining <= 0.0 {
+            cost.rate = (cost.rate - accel.bonus_rate).max(0.0);
+            commands.entity(entity).remove::<Acceleration>();
+        }
     }
 }

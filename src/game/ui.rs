@@ -3,8 +3,8 @@
 use bevy::prelude::*;
 
 use super::{
-    Cost, DRAW_COST, DRAW_COUNT, Deck, DiscardPile, GameResult, Health, LocalPlayer, Opponent,
-    PendingInput,
+    Block, Cost, DRAW_COST, DRAW_COUNT, Deck, DiscardPile, GameResult, Health, LocalPlayer,
+    Opponent, PendingInput, Thorns,
 };
 use crate::{
     AppSystems,
@@ -89,6 +89,22 @@ struct OpponentHpDisplay;
 #[derive(Component)]
 struct OpponentHpBar;
 
+/// Marker for player block display.
+#[derive(Component)]
+struct PlayerBlockDisplay;
+
+/// Marker for opponent block display.
+#[derive(Component)]
+struct OpponentBlockDisplay;
+
+/// Marker for player thorns display.
+#[derive(Component)]
+struct PlayerThornsDisplay;
+
+/// Marker for opponent thorns display.
+#[derive(Component)]
+struct OpponentThornsDisplay;
+
 /// Marker for the draw button.
 #[derive(Component)]
 struct DrawButton;
@@ -161,6 +177,18 @@ fn spawn_game_ui(mut commands: Commands) {
                                 Text::new("100 / 100"),
                                 TextFont::from_font_size(18.0),
                                 TextColor(Color::WHITE),
+                            ),
+                            (
+                                OpponentBlockDisplay,
+                                Text::new("Block: 0"),
+                                TextFont::from_font_size(16.0),
+                                TextColor(Color::srgb(0.5, 0.8, 1.0)),
+                            ),
+                            (
+                                OpponentThornsDisplay,
+                                Text::new("Thorns: 0"),
+                                TextFont::from_font_size(16.0),
+                                TextColor(Color::srgb(1.0, 0.6, 0.3)),
                             ),
                         ],
                     ),
@@ -264,6 +292,18 @@ fn spawn_game_ui(mut commands: Commands) {
                                 TextFont::from_font_size(18.0),
                                 TextColor(Color::WHITE),
                             ),
+                            (
+                                PlayerBlockDisplay,
+                                Text::new("Block: 0"),
+                                TextFont::from_font_size(16.0),
+                                TextColor(Color::srgb(0.5, 0.8, 1.0)),
+                            ),
+                            (
+                                PlayerThornsDisplay,
+                                Text::new("Thorns: 0"),
+                                TextFont::from_font_size(16.0),
+                                TextColor(Color::srgb(1.0, 0.6, 0.3)),
+                            ),
                         ],
                     ),
                     // Hand display + Draw button
@@ -318,7 +358,7 @@ fn update_cost_display(
     };
 
     for mut text in &mut display_query {
-        text.0 = format!("Cost: {:.1}", cost.current);
+        text.0 = format!("Cost: {:.1} (+{:.1}/s)", cost.current, cost.rate);
     }
 }
 
@@ -341,30 +381,50 @@ fn update_deck_display(
 }
 
 fn update_health_display(
-    player_query: Query<&Health, With<LocalPlayer>>,
-    opponent_query: Query<&Health, With<Opponent>>,
-    mut player_hp_text: Query<&mut Text, (With<PlayerHpDisplay>, Without<OpponentHpDisplay>)>,
-    mut player_hp_bar: Query<&mut Node, (With<PlayerHpBar>, Without<OpponentHpBar>)>,
-    mut opponent_hp_text: Query<&mut Text, (With<OpponentHpDisplay>, Without<PlayerHpDisplay>)>,
-    mut opponent_hp_bar: Query<&mut Node, (With<OpponentHpBar>, Without<PlayerHpBar>)>,
+    player_query: Query<(&Health, &Block, &Thorns), With<LocalPlayer>>,
+    opponent_query: Query<(&Health, &Block, &Thorns), With<Opponent>>,
+    mut text_sets: ParamSet<(
+        Query<&mut Text, With<PlayerHpDisplay>>,
+        Query<&mut Text, With<PlayerBlockDisplay>>,
+        Query<&mut Text, With<PlayerThornsDisplay>>,
+        Query<&mut Text, With<OpponentHpDisplay>>,
+        Query<&mut Text, With<OpponentBlockDisplay>>,
+        Query<&mut Text, With<OpponentThornsDisplay>>,
+    )>,
+    mut bar_sets: ParamSet<(
+        Query<&mut Node, With<PlayerHpBar>>,
+        Query<&mut Node, With<OpponentHpBar>>,
+    )>,
 ) {
     // Update player HP
-    if let Ok(health) = player_query.single() {
-        for mut text in &mut player_hp_text {
+    if let Ok((health, block, thorns)) = player_query.single() {
+        for mut text in text_sets.p0().iter_mut() {
             text.0 = format!("{:.0} / {:.0}", health.current, health.max);
         }
-        for mut node in &mut player_hp_bar {
+        for mut node in bar_sets.p0().iter_mut() {
             node.width = Val::Percent(health.percentage() * 100.0);
+        }
+        for mut text in text_sets.p1().iter_mut() {
+            text.0 = format!("Block: {:.0}", block.current);
+        }
+        for mut text in text_sets.p2().iter_mut() {
+            text.0 = format!("Thorns: {:.0}", thorns.damage);
         }
     }
 
     // Update opponent HP
-    if let Ok(health) = opponent_query.single() {
-        for mut text in &mut opponent_hp_text {
+    if let Ok((health, block, thorns)) = opponent_query.single() {
+        for mut text in text_sets.p3().iter_mut() {
             text.0 = format!("{:.0} / {:.0}", health.current, health.max);
         }
-        for mut node in &mut opponent_hp_bar {
+        for mut node in bar_sets.p1().iter_mut() {
             node.width = Val::Percent(health.percentage() * 100.0);
+        }
+        for mut text in text_sets.p4().iter_mut() {
+            text.0 = format!("Block: {:.0}", block.current);
+        }
+        for mut text in text_sets.p5().iter_mut() {
+            text.0 = format!("Thorns: {:.0}", thorns.damage);
         }
     }
 }

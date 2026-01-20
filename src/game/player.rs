@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use super::{CardId, Cost, Deck, DiscardPile, Hand, Health};
+use super::{Block, CardId, Cost, Deck, DiscardPile, Hand, Health, Thorns};
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Startup, setup_test_cards);
@@ -30,6 +30,8 @@ pub struct PlayerBundle {
     pub local_player: LocalPlayer,
     pub handle: PlayerHandle,
     pub health: Health,
+    pub block: Block,
+    pub thorns: Thorns,
     pub cost: Cost,
     pub deck: Deck,
     pub hand: Hand,
@@ -46,6 +48,8 @@ impl PlayerBundle {
             local_player: LocalPlayer,
             handle: PlayerHandle(handle),
             health: Health::new(100.0),
+            block: Block::default(),
+            thorns: Thorns::default(),
             cost: Cost::new(cost_rate),
             deck,
             hand: Hand::default(),
@@ -61,6 +65,8 @@ pub struct OpponentBundle {
     pub opponent: Opponent,
     pub handle: PlayerHandle,
     pub health: Health,
+    pub block: Block,
+    pub thorns: Thorns,
     pub cost: Cost,
     pub deck: Deck,
     pub hand: Hand,
@@ -77,6 +83,8 @@ impl OpponentBundle {
             opponent: Opponent,
             handle: PlayerHandle(handle),
             health: Health::new(hp),
+            block: Block::default(),
+            thorns: Thorns::default(),
             cost: Cost::new(cost_rate),
             deck,
             hand: Hand::default(),
@@ -116,26 +124,83 @@ fn setup_test_cards(mut registry: ResMut<super::CardRegistry>) {
         cost: 1.5,
         effect: CardEffect::Draw(2),
     });
+
+    registry.register(CardDef {
+        id: CardId(5),
+        name: "Defend".to_string(),
+        cost: 1.0,
+        effect: CardEffect::Block(6.0),
+    });
+
+    registry.register(CardDef {
+        id: CardId(6),
+        name: "Shield Bash".to_string(),
+        cost: 2.0,
+        effect: CardEffect::Combo(vec![CardEffect::Damage(8.0), CardEffect::Block(5.0)]),
+    });
+
+    registry.register(CardDef {
+        id: CardId(7),
+        name: "Bramble".to_string(),
+        cost: 1.5,
+        effect: CardEffect::Thorns(3.0),
+    });
+
+    registry.register(CardDef {
+        id: CardId(8),
+        name: "Ironbark".to_string(),
+        cost: 2.5,
+        effect: CardEffect::Combo(vec![CardEffect::Block(8.0), CardEffect::Thorns(2.0)]),
+    });
+
+    registry.register(CardDef {
+        id: CardId(9),
+        name: "Adrenaline".to_string(),
+        cost: 1.5,
+        effect: CardEffect::Accelerate {
+            bonus_rate: 0.6,
+            duration: 6.0,
+        },
+    });
+
+    registry.register(CardDef {
+        id: CardId(10),
+        name: "Rush".to_string(),
+        cost: 2.0,
+        effect: CardEffect::Combo(vec![
+            CardEffect::Damage(6.0),
+            CardEffect::Accelerate {
+                bonus_rate: 0.4,
+                duration: 4.0,
+            },
+        ]),
+    });
 }
 
 /// Create a test deck with multiple copies of each card.
 pub fn create_test_deck() -> Vec<CardId> {
     vec![
-        // 4x Quick Strike
+        // 2x Quick Strike
         CardId(1),
         CardId(1),
-        CardId(1),
-        CardId(1),
-        // 3x Heavy Blow
+        // 1x Heavy Blow
         CardId(2),
-        CardId(2),
-        CardId(2),
-        // 3x Heal
+        // 1x Heal
         CardId(3),
-        CardId(3),
-        CardId(3),
-        // 2x Draw
+        // 1x Draw
         CardId(4),
-        CardId(4),
+        // 2x Defend
+        CardId(5),
+        CardId(5),
+        // 1x Shield Bash
+        CardId(6),
+        // 1x Bramble
+        CardId(7),
+        // 1x Ironbark
+        CardId(8),
+        // 1x Adrenaline
+        CardId(9),
+        // 1x Rush
+        CardId(10),
     ]
 }

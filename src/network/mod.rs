@@ -14,8 +14,9 @@ use bevy_ggrs::prelude::*;
 use bevy_matchbox::prelude::{MatchboxSocket, PeerId};
 
 use crate::game::{
-    CardRegistry, Cost, Deck, DiscardPile, DrawCardsMessage, GameMode, GameplaySystems, Hand,
-    Health, PlayCardMessage, PlayerHandle, apply_local_input_flags, is_online,
+    Acceleration, Block, CardRegistry, Cost, Deck, DiscardPile, DrawCardsMessage, GameMode,
+    GameplaySystems, Hand, Health, PlayCardMessage, PlayerHandle, Thorns, apply_local_input_flags,
+    is_online,
 };
 use crate::screens::Screen;
 
@@ -39,7 +40,10 @@ pub fn plugin(app: &mut App) {
 
     // Rollback configuration
     app.rollback_component_with_clone::<Health>();
+    app.rollback_component_with_clone::<Block>();
+    app.rollback_component_with_clone::<Thorns>();
     app.rollback_component_with_clone::<Cost>();
+    app.rollback_component_with_clone::<Acceleration>();
     app.rollback_component_with_clone::<Hand>();
     app.rollback_component_with_clone::<Deck>();
     app.rollback_component_with_clone::<DiscardPile>();
