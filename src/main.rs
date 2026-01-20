@@ -15,11 +15,9 @@ mod network;
 mod screens;
 mod theme;
 
-use bevy::{
-    asset::AssetMetaCheck, core_pipeline::core_2d::graph::Core2d, prelude::*,
-    remote::http::RemoteHttpPlugin, render::camera::CameraRenderGraph,
-};
+use bevy::{asset::AssetMetaCheck, prelude::*, remote::http::RemoteHttpPlugin};
 use bevy_defer::AsyncPlugin;
+use bevy_rich_text3d::Text3dPlugin;
 
 fn main() -> AppExit {
     App::new().add_plugins(AppPlugin).run()
@@ -50,6 +48,10 @@ impl Plugin for AppPlugin {
                 }),
             MeshPickingPlugin,
             AsyncPlugin::default_settings(),
+            Text3dPlugin {
+                load_system_fonts: true,
+                ..default()
+            },
         ));
         app.insert_resource(UiPickingSettings {
             require_markers: true,
@@ -140,16 +142,5 @@ fn spawn_camera(mut commands: Commands) {
         IsDefaultUiCamera,
         UiPickingCamera,
         MeshPickingCamera,
-    ));
-    commands.spawn((
-        Name::new("Card Text Camera"),
-        Camera {
-            order: 1,
-            clear_color: ClearColorConfig::None,
-            ..default()
-        },
-        CameraRenderGraph::new(Core2d),
-        Projection::Perspective(PerspectiveProjection::default()),
-        camera_transform,
     ));
 }

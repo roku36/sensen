@@ -1,11 +1,13 @@
 //! 3D card table rendering with bevy_la_mesa.
 
-use bevy::{prelude::*, transform::TransformSystems};
+use bevy::{color::Srgba, prelude::*, render::alpha::AlphaMode, transform::TransformSystems};
 use bevy_la_mesa::events::{AlignCardsInHand, CardPress, DrawToHand, PlaceCardOnTable, RenderDeck};
 use bevy_la_mesa::{
     Card as MesaCardComponent, CardMetadata, Deck as MesaDeck, DeckArea, Hand as MesaHand,
     HandArea, LaMesaPlugin, LaMesaPluginSettings, PlayArea,
 };
+use bevy_rich_text3d::{Text3d, Text3dStyling, TextAlign, TextAnchor, TextAtlas};
+use std::num::NonZeroU32;
 
 use super::{
     CardEffect, CardId, CardRegistry, Deck, DeckReshuffledMessage, GameResult, Hand, LocalPlayer,
@@ -16,6 +18,9 @@ use crate::{AppSystems, input::card_flag, screens::Screen};
 /// Marker component for cards that have effect text added.
 #[derive(Component)]
 struct CardEffectTextAdded;
+
+#[derive(Resource, Clone)]
+struct CardTextMaterial(Handle<StandardMaterial>);
 
 #[derive(Component, Default)]
 struct OpponentHandMirror {
@@ -252,6 +257,14 @@ fn spawn_mesa_scene(
         Transform::default(),
         DespawnOnExit(Screen::Gameplay),
     ));
+
+    let text_material = materials.add(StandardMaterial {
+        base_color_texture: Some(TextAtlas::DEFAULT_IMAGE.clone()),
+        alpha_mode: AlphaMode::Mask(0.5),
+        unlit: true,
+        ..default()
+    });
+    commands.insert_resource(CardTextMaterial(text_material));
 
     let local_deck_transform = Transform::from_translation(Vec3::new(-6.0, 0.01, 2.5));
     let opponent_deck_transform = rotate_around_origin_y(local_deck_transform);
@@ -724,8 +737,14 @@ fn player_index_for_entity(
 fn add_effect_text_to_cards(
     mut commands: Commands,
     registry: Res<CardRegistry>,
+    text_material: Option<Res<CardTextMaterial>>,
     cards_without_text: Query<(Entity, &MesaCardComponent<MesaCard>), Without<CardEffectTextAdded>>,
 ) {
+    let Some(text_material) = text_material else {
+        return;
+    };
+    let text_material = text_material.0.clone();
+
     for (entity, card) in cards_without_text.iter() {
         let card_id = card.data.card_id;
         let Some(card_def) = registry.get(card_id) else {
@@ -744,9 +763,9 @@ fn add_effect_text_to_cards(
 
         // Determine color based on effect type
         let effect_color = match &card_def.effect {
-            CardEffect::Damage(_) => Color::srgb(1.0, 0.3, 0.3),
-            CardEffect::Heal(_) => Color::srgb(0.3, 1.0, 0.3),
-            CardEffect::Draw(_) => Color::srgb(0.3, 0.5, 1.0),
+            CardEffect::Damage(_) => Srgba::rgb(1.0, 0.3, 0.3),
+            CardEffect::Heal(_) => Srgba::rgb(0.3, 1.0, 0.3),
+            CardEffect::Draw(_) => Srgba::rgb(0.3, 0.5, 1.0),
         };
 
         commands.entity(entity).insert(CardEffectTextAdded);
@@ -756,10 +775,21 @@ fn add_effect_text_to_cards(
             // Effect text (center of card)
             parent.spawn((
                 Name::new("Card Effect Text"),
-                Text2d::new(effect_text),
-                TextFont::from_font_size(48.0),
-                TextColor(effect_color),
-                TextLayout::new_with_justify(Justify::Center),
+                Text3d::new(effect_text),
+                Text3dStyling {
+                    size: 64.0,
+                    color: effect_color,
+                    stroke: NonZeroU32::new(6),
+                    stroke_color: Srgba::BLACK,
+                    align: TextAlign::Center,
+                    anchor: TextAnchor::CENTER,
+                    line_height: 0.9,
+                    world_scale: Some(Vec2::splat(1.2)),
+                    layer_offset: 0.001,
+                    ..default()
+                },
+                Mesh3d::default(),
+                MeshMaterial3d(text_material.clone()),
                 Transform::from_xyz(0.0, 0.02, 0.0)
                     .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
             ));
@@ -767,10 +797,20 @@ fn add_effect_text_to_cards(
             // Cost text (top left corner)
             parent.spawn((
                 Name::new("Card Cost Text"),
-                Text2d::new(cost_text),
-                TextFont::from_font_size(36.0),
-                TextColor(Color::srgb(1.0, 0.9, 0.2)),
-                TextLayout::new_with_justify(Justify::Center),
+                Text3d::new(cost_text),
+                Text3dStyling {
+                    size: 48.0,
+                    color: Srgba::rgb(1.0, 0.9, 0.2),
+                    stroke: NonZeroU32::new(5),
+                    stroke_color: Srgba::BLACK,
+                    align: TextAlign::Center,
+                    anchor: TextAnchor::CENTER,
+                    world_scale: Some(Vec2::splat(0.7)),
+                    layer_offset: 0.001,
+                    ..default()
+                },
+                Mesh3d::default(),
+                MeshMaterial3d(text_material.clone()),
                 Transform::from_xyz(-0.9, 0.02, -1.3)
                     .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
             ));
