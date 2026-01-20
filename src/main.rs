@@ -15,7 +15,10 @@ mod network;
 mod screens;
 mod theme;
 
-use bevy::{asset::AssetMetaCheck, prelude::*, remote::http::RemoteHttpPlugin};
+use bevy::{
+    asset::AssetMetaCheck, core_pipeline::core_2d::graph::Core2d, prelude::*,
+    remote::http::RemoteHttpPlugin, render::camera::CameraRenderGraph,
+};
 use bevy_defer::AsyncPlugin;
 
 fn main() -> AppExit {
@@ -129,12 +132,24 @@ struct Pause(pub bool);
 struct PausableSystems;
 
 fn spawn_camera(mut commands: Commands) {
+    let camera_transform = Transform::from_xyz(0.0, 12.0, 14.0).looking_at(Vec3::ZERO, Vec3::Y);
     commands.spawn((
         Name::new("Camera"),
         Camera3d::default(),
-        Transform::from_xyz(0.0, 12.0, 14.0).looking_at(Vec3::ZERO, Vec3::Y),
+        camera_transform,
         IsDefaultUiCamera,
         UiPickingCamera,
         MeshPickingCamera,
+    ));
+    commands.spawn((
+        Name::new("Card Text Camera"),
+        Camera {
+            order: 1,
+            clear_color: ClearColorConfig::None,
+            ..default()
+        },
+        CameraRenderGraph::new(Core2d),
+        Projection::Perspective(PerspectiveProjection::default()),
+        camera_transform,
     ));
 }

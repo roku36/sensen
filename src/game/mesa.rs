@@ -1,6 +1,6 @@
 //! 3D card table rendering with bevy_la_mesa.
 
-use bevy::prelude::*;
+use bevy::{prelude::*, transform::TransformSystems};
 use bevy_la_mesa::events::{AlignCardsInHand, CardPress, DrawToHand, PlaceCardOnTable, RenderDeck};
 use bevy_la_mesa::{
     Card as MesaCardComponent, CardMetadata, Deck as MesaDeck, DeckArea, Hand as MesaHand,
@@ -16,6 +16,11 @@ use crate::{AppSystems, input::card_flag, screens::Screen};
 /// Marker component for cards that have effect text added.
 #[derive(Component)]
 struct CardEffectTextAdded;
+
+#[derive(Component, Default)]
+struct OpponentHandMirror {
+    last_mirrored_x: Option<f32>,
+}
 
 const LOCAL_PLAYER_INDEX: usize = 1;
 const OPPONENT_PLAYER_INDEX: usize = 2;
@@ -168,6 +173,12 @@ pub fn plugin(app: &mut App) {
             .run_if(in_state(Screen::Gameplay)),
     );
     app.add_systems(
+        PostUpdate,
+        mirror_opponent_hand_positions
+            .before(TransformSystems::Propagate)
+            .run_if(in_state(Screen::Gameplay)),
+    );
+    app.add_systems(
         Update,
         tag_mesa_cards_for_cleanup
             .in_set(AppSystems::Update)
@@ -193,6 +204,15 @@ fn reset_mesa_state(
     *rendered = MesaDecksRendered::default();
     *hand_map = MesaHandMap::default();
     *prev_sizes = PreviousHandSizes::default();
+}
+
+fn rotate_around_origin_y(transform: Transform) -> Transform {
+    let rotation = Quat::from_rotation_y(std::f32::consts::PI);
+    Transform {
+        translation: rotation * transform.translation,
+        rotation: rotation * transform.rotation,
+        ..transform
+    }
 }
 
 fn spawn_mesa_scene(
@@ -233,6 +253,14 @@ fn spawn_mesa_scene(
         DespawnOnExit(Screen::Gameplay),
     ));
 
+    let local_deck_transform = Transform::from_translation(Vec3::new(-6.0, 0.01, 2.5));
+    let opponent_deck_transform = rotate_around_origin_y(local_deck_transform);
+    let local_hand_transform = Transform::from_translation(Vec3::new(0.0, 1.6, 6.5))
+        .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_4));
+    let opponent_hand_transform = rotate_around_origin_y(local_hand_transform);
+    let local_play_transform = Transform::from_translation(Vec3::new(0.0, 0.02, 1.5));
+    let opponent_play_transform = rotate_around_origin_y(local_play_transform);
+
     let local_deck = commands
         .spawn((
             Name::new("Deck Area Local"),
@@ -242,7 +270,7 @@ fn spawn_mesa_scene(
                 perceptual_roughness: 0.85,
                 ..default()
             })),
-            Transform::from_translation(Vec3::new(-6.0, 0.01, 2.5)),
+            local_deck_transform,
             DeckArea {
                 marker: LOCAL_PLAYER_INDEX,
             },
@@ -259,7 +287,7 @@ fn spawn_mesa_scene(
                 perceptual_roughness: 0.85,
                 ..default()
             })),
-            Transform::from_translation(Vec3::new(6.0, 0.01, -2.5)),
+            opponent_deck_transform,
             DeckArea {
                 marker: OPPONENT_PLAYER_INDEX,
             },
@@ -269,8 +297,7 @@ fn spawn_mesa_scene(
 
     commands.spawn((
         Name::new("Hand Area Local"),
-        Transform::from_translation(Vec3::new(0.0, 1.6, 6.5))
-            .with_rotation(Quat::from_rotation_x(std::f32::consts::PI / 4.0)),
+        local_hand_transform,
         HandArea {
             player: LOCAL_PLAYER_INDEX,
         },
@@ -279,8 +306,7 @@ fn spawn_mesa_scene(
 
     commands.spawn((
         Name::new("Hand Area Opponent"),
-        Transform::from_translation(Vec3::new(0.0, 1.6, -6.5))
-            .with_rotation(Quat::from_rotation_x(-std::f32::consts::PI / 4.0)),
+        opponent_hand_transform,
         HandArea {
             player: OPPONENT_PLAYER_INDEX,
         },
@@ -289,7 +315,7 @@ fn spawn_mesa_scene(
 
     commands.spawn((
         Name::new("Play Area Local"),
-        Transform::from_translation(Vec3::new(0.0, 0.02, 1.5)),
+        local_play_transform,
         PlayArea {
             marker: LOCAL_PLAYER_INDEX,
             player: LOCAL_PLAYER_INDEX,
@@ -299,7 +325,7 @@ fn spawn_mesa_scene(
 
     commands.spawn((
         Name::new("Play Area Opponent"),
-        Transform::from_translation(Vec3::new(0.0, 0.02, -1.5)),
+        opponent_play_transform,
         PlayArea {
             marker: OPPONENT_PLAYER_INDEX,
             player: OPPONENT_PLAYER_INDEX,
@@ -761,6 +787,61 @@ fn tag_mesa_cards_for_cleanup(
         entity_commands.insert(DespawnOnExit(Screen::Gameplay));
         if pickable.is_none() {
             entity_commands.insert(Pickable::default());
+        }
+    }
+}
+
+fn mirror_opponent_hand_positions(
+    mut commands: Commands,
+    hand_areas: Query<(&HandArea, &Transform)>,
+    mut cards: Query<
+        (
+            Entity,
+            &MesaHand,
+            &mut Transform,
+            &mut MesaCardComponent<MesaCard>,
+            Option<&mut OpponentHandMirror>,
+        ),
+        Without<HandArea>,
+    >,
+) {
+    let Some((_, hand_transform)) = hand_areas
+        .iter()
+        .find(|(area, _)| area.player == OPPONENT_PLAYER_INDEX)
+    else {
+        return;
+    };
+    let center_x = hand_transform.translation.x;
+
+    for (entity, hand, mut transform, mut card, mirror_state) in &mut cards {
+        if hand.player != OPPONENT_PLAYER_INDEX {
+            continue;
+        }
+
+        let already_mirrored = mirror_state
+            .as_ref()
+            .and_then(|state| state.last_mirrored_x)
+            .map(|last_x| (transform.translation.x - last_x).abs() < 1e-4)
+            .unwrap_or(false);
+        if already_mirrored {
+            continue;
+        }
+
+        let offset = transform.translation.x - center_x;
+        let new_x = center_x - offset;
+
+        transform.translation.x = new_x;
+        if let Some(base_transform) = card.transform.as_mut() {
+            let base_offset = base_transform.translation.x - center_x;
+            base_transform.translation.x = center_x - base_offset;
+        }
+
+        if let Some(mut state) = mirror_state {
+            state.last_mirrored_x = Some(new_x);
+        } else {
+            commands.entity(entity).insert(OpponentHandMirror {
+                last_mirrored_x: Some(new_x),
+            });
         }
     }
 }
