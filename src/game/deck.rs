@@ -15,6 +15,10 @@ pub fn plugin(app: &mut App) {
     app.add_message::<PlayCardMessage>();
     app.add_message::<CardPlayedMessage>();
     app.add_message::<DeckReshuffledMessage>();
+    app.clear_messages_on_exit::<DrawCardsMessage>(Screen::Gameplay)
+        .clear_messages_on_exit::<PlayCardMessage>(Screen::Gameplay)
+        .clear_messages_on_exit::<CardPlayedMessage>(Screen::Gameplay)
+        .clear_messages_on_exit::<DeckReshuffledMessage>(Screen::Gameplay);
     app.add_systems(
         Update,
         (handle_draw_cards, handle_play_card)

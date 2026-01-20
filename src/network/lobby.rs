@@ -50,6 +50,7 @@ pub fn lobby_startup(mut commands: Commands) {
             ..default()
         },
         BackgroundColor(Color::srgb(0.1, 0.1, 0.15)),
+        DespawnOnExit(Screen::Lobby),
         children![
             (
                 Text::new("SENSEN"),
@@ -64,13 +65,6 @@ pub fn lobby_startup(mut commands: Commands) {
             ),
         ],
     ));
-}
-
-/// Clean up lobby UI when leaving.
-pub fn lobby_cleanup(mut commands: Commands, lobby_ui: Query<Entity, With<LobbyUI>>) {
-    for entity in &lobby_ui {
-        commands.entity(entity).despawn();
-    }
 }
 
 /// Main lobby system - handles matchmaking and session creation.

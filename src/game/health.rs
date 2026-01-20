@@ -24,6 +24,9 @@ pub fn plugin(app: &mut App) {
     app.add_message::<DamageMessage>();
     app.add_message::<HealMessage>();
     app.add_message::<DeathMessage>();
+    app.clear_messages_on_exit::<DamageMessage>(Screen::Gameplay)
+        .clear_messages_on_exit::<HealMessage>(Screen::Gameplay)
+        .clear_messages_on_exit::<DeathMessage>(Screen::Gameplay);
     app.add_systems(
         Update,
         (handle_damage, handle_heal, check_death, handle_game_over)

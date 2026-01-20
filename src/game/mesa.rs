@@ -142,6 +142,11 @@ pub fn plugin(app: &mut App) {
     app.init_resource::<MesaDecksRendered>();
     app.init_resource::<MesaHandMap>();
     app.init_resource::<PreviousHandSizes>();
+    app.clear_messages_on_exit::<CardPress>(Screen::Gameplay)
+        .clear_messages_on_exit::<RenderDeck<MesaCard>>(Screen::Gameplay)
+        .clear_messages_on_exit::<DrawToHand>(Screen::Gameplay)
+        .clear_messages_on_exit::<PlaceCardOnTable>(Screen::Gameplay)
+        .clear_messages_on_exit::<AlignCardsInHand>(Screen::Gameplay);
 
     app.add_systems(
         OnEnter(Screen::Gameplay),
@@ -749,11 +754,13 @@ fn add_effect_text_to_cards(
 
 fn tag_mesa_cards_for_cleanup(
     mut commands: Commands,
-    new_cards: Query<Entity, Added<MesaCardComponent<MesaCard>>>,
+    new_cards: Query<(Entity, Option<&Pickable>), Added<MesaCardComponent<MesaCard>>>,
 ) {
-    for entity in &new_cards {
-        commands
-            .entity(entity)
-            .insert(DespawnOnExit(Screen::Gameplay));
+    for (entity, pickable) in &new_cards {
+        let mut entity_commands = commands.entity(entity);
+        entity_commands.insert(DespawnOnExit(Screen::Gameplay));
+        if pickable.is_none() {
+            entity_commands.insert(Pickable::default());
+        }
     }
 }

@@ -51,6 +51,10 @@ impl Plugin for AppPlugin {
         app.insert_resource(UiPickingSettings {
             require_markers: true,
         });
+        app.insert_resource(MeshPickingSettings {
+            require_markers: true,
+            ..default()
+        });
 
         // Add other plugins.
         app.add_plugins((
@@ -131,5 +135,6 @@ fn spawn_camera(mut commands: Commands) {
         Transform::from_xyz(0.0, 12.0, 14.0).looking_at(Vec3::ZERO, Vec3::Y),
         IsDefaultUiCamera,
         UiPickingCamera,
+        MeshPickingCamera,
     ));
 }

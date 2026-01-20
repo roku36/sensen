@@ -65,7 +65,6 @@ pub fn plugin(app: &mut App) {
         OnEnter(Screen::Lobby),
         (start_matchbox_socket, lobby_startup),
     );
-    app.add_systems(OnExit(Screen::Lobby), lobby_cleanup);
     app.add_systems(Update, lobby_system.run_if(in_state(Screen::Lobby)));
     app.add_systems(OnEnter(Screen::Title), cleanup_network_session);
 

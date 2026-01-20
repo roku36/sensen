@@ -36,7 +36,9 @@ pub fn plugin(app: &mut App) {
     app.add_systems(OnEnter(GameResult::Defeat), spawn_defeat_overlay);
     app.add_systems(
         Update,
-        handle_result_input.run_if(not(in_state(GameResult::Playing))),
+        handle_result_input
+            .run_if(in_state(Screen::Gameplay))
+            .run_if(not(in_state(GameResult::Playing))),
     );
 
     // BRP remote input simulation (dev only)
@@ -104,6 +106,7 @@ fn spawn_game_ui(mut commands: Commands) {
             padding: UiRect::all(px(20)),
             ..default()
         },
+        Pickable::IGNORE,
         DespawnOnExit(Screen::Gameplay),
         children![
             // Top section: HP bars and info
