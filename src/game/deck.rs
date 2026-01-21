@@ -113,8 +113,8 @@ impl Deck {
         }
     }
 
-    pub fn seed_for_handle(handle: usize) -> u64 {
-        DEFAULT_DECK_SEED ^ (handle as u64).wrapping_mul(0x9e3779b97f4a7c15)
+    pub fn seed_for_handle(match_seed: u64, handle: usize) -> u64 {
+        DEFAULT_DECK_SEED ^ match_seed ^ (handle as u64).wrapping_mul(0x9e3779b97f4a7c15)
     }
 
     /// Shuffle the deck.
@@ -129,9 +129,13 @@ impl Deck {
         }
     }
 
-    /// Draw a card from the top of the deck.
+    /// Draw a random card from the deck.
     pub fn draw(&mut self) -> Option<CardId> {
-        self.cards.pop()
+        if self.cards.is_empty() {
+            return None;
+        }
+        let index = (self.next_rng() % self.cards.len() as u64) as usize;
+        Some(self.cards.swap_remove(index))
     }
 
     /// Add cards to the deck (used when recycling discard pile).
@@ -245,11 +249,10 @@ fn handle_draw_cards(
         while draws_remaining > 0 {
             draws_remaining -= 1;
 
-            // If deck is empty, shuffle discard pile back into deck
+            // If deck is empty, recycle discard pile back into deck
             if deck.is_empty() && !discard.is_empty() {
                 let recycled = discard.take_all();
                 deck.add_cards(recycled);
-                deck.shuffle();
                 reshuffled_messages.write(DeckReshuffledMessage {
                     player: msg.player,
                     deck: deck.cards.clone(),

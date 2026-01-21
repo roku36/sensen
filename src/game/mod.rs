@@ -23,6 +23,7 @@ pub use status::*;
 
 use bevy::prelude::*;
 use bevy_ggrs::GgrsSchedule;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::AppSystems;
 
@@ -32,6 +33,20 @@ pub enum GameMode {
     #[default]
     Offline,
     Online,
+}
+
+/// Per-match deterministic seed (shared across peers in online matches).
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct MatchSeed(pub u64);
+
+impl Default for MatchSeed {
+    fn default() -> Self {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
+        Self(nanos ^ 0x9e3779b97f4a7c15)
+    }
 }
 
 pub fn is_online(mode: Res<GameMode>) -> bool {
@@ -54,6 +69,7 @@ pub enum GameplaySystems {
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<GameMode>();
+    app.init_resource::<MatchSeed>();
     app.configure_sets(
         GgrsSchedule,
         (

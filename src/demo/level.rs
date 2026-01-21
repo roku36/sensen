@@ -5,8 +5,8 @@ use bevy::prelude::*;
 use crate::{
     asset_tracking::LoadResource,
     audio::music,
-    game::{DrawCardsMessage, GameMode, OpponentBundle, PlayerBundle, create_test_deck},
-    network::NetworkPlayers,
+    game::{DrawCardsMessage, GameMode, MatchSeed, OpponentBundle, PlayerBundle, create_test_deck},
+    network::{NetworkPlayers, seed_from_peer_id},
     screens::Screen,
 };
 
@@ -40,10 +40,15 @@ fn spawn_level_once(
     mut draw_messages: MessageWriter<DrawCardsMessage>,
     network_players: Option<Res<NetworkPlayers>>,
     game_mode: Res<GameMode>,
+    mut match_seed: ResMut<MatchSeed>,
     mut spawned: ResMut<LevelSpawned>,
 ) {
     if spawned.0 {
         return;
+    }
+
+    if *game_mode == GameMode::Offline {
+        *match_seed = MatchSeed::default();
     }
 
     let local_handle = if *game_mode == GameMode::Online {
@@ -85,10 +90,32 @@ fn spawn_level_once(
         1
     };
 
+    let (player_seed, opponent_seed) = if *game_mode == GameMode::Online {
+        let Some(players) = network_players.as_ref() else {
+            return;
+        };
+        let Some(local_peer_id) = players.handles.get(local_handle).copied() else {
+            return;
+        };
+        let Some(opponent_peer_id) = players.handles.get(opponent_handle).copied() else {
+            return;
+        };
+        let base = match_seed.0;
+        (
+            base ^ seed_from_peer_id(local_peer_id),
+            base ^ seed_from_peer_id(opponent_peer_id),
+        )
+    } else {
+        (
+            crate::game::Deck::seed_for_handle(match_seed.0, local_handle),
+            crate::game::Deck::seed_for_handle(match_seed.0, opponent_handle),
+        )
+    };
+
     // Spawn local player with test deck, cost rate 1.0/sec
     let player_entity = commands
         .spawn((
-            PlayerBundle::new(local_handle, 1.0, create_test_deck()),
+            PlayerBundle::new(local_handle, 1.0, create_test_deck(), player_seed),
             DespawnOnExit(Screen::Gameplay),
         ))
         .id();
@@ -96,7 +123,7 @@ fn spawn_level_once(
     // Spawn opponent with same HP and a matching deck
     let opponent_entity = commands
         .spawn((
-            OpponentBundle::new(opponent_handle, 1.0, create_test_deck()),
+            OpponentBundle::new(opponent_handle, 1.0, create_test_deck(), opponent_seed),
             DespawnOnExit(Screen::Gameplay),
         ))
         .id();

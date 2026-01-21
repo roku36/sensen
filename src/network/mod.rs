@@ -100,6 +100,23 @@ pub fn plugin(app: &mut App) {
     );
 }
 
+pub fn match_seed_from_peers(peer_ids: &[PeerId]) -> u64 {
+    const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+    const FNV_PRIME: u64 = 0x100000001b3;
+    let mut hash = FNV_OFFSET;
+    for peer_id in peer_ids {
+        for byte in peer_id.0.as_bytes() {
+            hash ^= *byte as u64;
+            hash = hash.wrapping_mul(FNV_PRIME);
+        }
+    }
+    hash
+}
+
+pub fn seed_from_peer_id(peer_id: PeerId) -> u64 {
+    match_seed_from_peers(std::slice::from_ref(&peer_id))
+}
+
 /// Process GGRS-synchronized inputs and update game state.
 ///
 /// Important: In a 2-player game, each client sees themselves as LocalPlayer

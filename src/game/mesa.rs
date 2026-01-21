@@ -2,7 +2,7 @@
 
 use bevy::{color::Srgba, prelude::*, render::alpha::AlphaMode, transform::TransformSystems};
 use bevy_la_mesa::events::{
-    AlignCardsInHand, CardHover, CardOut, CardPress, DiscardCardToDeck, DrawToHand, RenderDeck,
+    AlignCardsInHand, CardHover, CardOut, CardPress, DiscardCardToDeck, RenderDeck,
 };
 use bevy_la_mesa::{
     Card as MesaCardComponent, CardMetadata, Deck as MesaDeck, DeckArea, Hand as MesaHand,
@@ -163,7 +163,6 @@ pub fn plugin(app: &mut App) {
     app.init_resource::<PreviousHandSizes>();
     app.clear_messages_on_exit::<CardPress>(Screen::Gameplay)
         .clear_messages_on_exit::<RenderDeck<MesaCard>>(Screen::Gameplay)
-        .clear_messages_on_exit::<DrawToHand>(Screen::Gameplay)
         .clear_messages_on_exit::<DiscardCardToDeck>(Screen::Gameplay)
         .clear_messages_on_exit::<AlignCardsInHand>(Screen::Gameplay);
 
@@ -459,11 +458,14 @@ fn handle_deck_reshuffle(
 fn sync_hand_to_mesa(
     local_player: Query<&Hand, With<LocalPlayer>>,
     opponent_player: Query<&Hand, With<Opponent>>,
-    scene: Res<MesaScene>,
-    deck_cards_query: Query<(Entity, &MesaDeck, &Transform)>,
+    hand_areas: Query<(&HandArea, &Transform)>,
+    registry: Res<CardRegistry>,
     mut hand_map: ResMut<MesaHandMap>,
     mut prev_sizes: ResMut<PreviousHandSizes>,
-    mut draw_to_hand: MessageWriter<DrawToHand>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>,
 ) {
     let players: [(usize, Option<&Hand>); 2] = [
         (LOCAL_PLAYER_INDEX, local_player.single().ok()),
@@ -476,40 +478,35 @@ fn sync_hand_to_mesa(
         let previous_size = prev_sizes.get(player_index);
 
         if current_size > previous_size {
-            // Cards were added - need to draw to mesa
+            // Cards were added - spawn hand cards that match game logic order.
             let cards_to_draw = current_size - previous_size;
+            let new_cards = &hand.cards[previous_size..current_size];
+            let hand_transform = hand_areas
+                .iter()
+                .find(|(area, _)| area.player == player_index)
+                .map(|(_, transform)| transform.clone())
+                .unwrap_or_default();
 
-            let Some(deck_entity) = scene.deck_for(player_index) else {
-                continue;
-            };
-
-            // Check if we have enough deck cards visually
-            let available = gather_deck_cards(&deck_cards_query);
-            let available_count = available.get(&player_index).map(|v| v.len()).unwrap_or(0);
-
-            if available_count >= cards_to_draw {
-                // Get visual hand card count (from MesaHandMap)
-                let visual_hand_size = hand_map.hand(player_index).map(|h| h.len()).unwrap_or(0);
-
-                // Update MesaHandMap with newly drawn card entities
-                if let Some(cards) = available.get(&player_index) {
-                    if let Some(mesa_hand) = hand_map.hand_mut(player_index) {
-                        mesa_hand.extend(cards.iter().take(cards_to_draw).copied());
-                    }
+            if let Some(mesa_hand) = hand_map.hand_mut(player_index) {
+                for card_id in new_cards.iter().take(cards_to_draw) {
+                    let mesa_card = mesa_card_from_id(*card_id, &registry);
+                    let card_entity = spawn_hand_card(
+                        &mut commands,
+                        &mesa_card,
+                        player_index,
+                        hand_transform,
+                        &mut meshes,
+                        &mut materials,
+                        &asset_server,
+                    );
+                    mesa_hand.push(card_entity);
                 }
-
-                // bevy_la_mesa expects num_cards = target hand size
-                draw_to_hand.write(DrawToHand {
-                    deck_entity,
-                    num_cards: visual_hand_size + cards_to_draw,
-                    player: player_index,
-                });
-
-                info!(
-                    "sync_hand_to_mesa: player {} drew {} cards (hand: {} -> {})",
-                    player_index, cards_to_draw, previous_size, current_size
-                );
             }
+
+            info!(
+                "sync_hand_to_mesa: player {} drew {} cards (hand: {} -> {})",
+                player_index, cards_to_draw, previous_size, current_size
+            );
         }
 
         // Update previous size to current
@@ -675,31 +672,6 @@ fn track_hand_hover(
     }
 }
 
-fn gather_deck_cards(
-    deck_cards_query: &Query<(Entity, &MesaDeck, &Transform)>,
-) -> std::collections::HashMap<usize, Vec<Entity>> {
-    let mut deck_cards: std::collections::HashMap<usize, Vec<(Entity, f32)>> =
-        std::collections::HashMap::new();
-
-    for (entity, deck, transform) in deck_cards_query.iter() {
-        deck_cards
-            .entry(deck.marker)
-            .or_default()
-            .push((entity, transform.translation.y));
-    }
-
-    let mut result = std::collections::HashMap::new();
-    for (marker, mut cards) in deck_cards {
-        cards.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        result.insert(
-            marker,
-            cards.into_iter().map(|(entity, _)| entity).collect(),
-        );
-    }
-
-    result
-}
-
 fn rebuild_deck_visual(
     deck_entity: Entity,
     marker: usize,
@@ -777,6 +749,78 @@ fn mesa_card_from_id(card_id: CardId, registry: &CardRegistry) -> MesaCard {
         front,
         back: CARD_BACK_IMAGE.to_string(),
     }
+}
+
+fn spawn_hand_card(
+    commands: &mut Commands,
+    card: &MesaCard,
+    player_index: usize,
+    hand_transform: Transform,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    asset_server: &AssetServer,
+) -> Entity {
+    let back_texture = asset_server.load(card.back.clone());
+    let back_material = materials.add(StandardMaterial {
+        base_color_texture: Some(back_texture),
+        ..default()
+    });
+
+    let face_texture = asset_server.load(card.front.clone());
+    let face_material: Handle<StandardMaterial> = materials.add(StandardMaterial {
+        base_color_texture: Some(face_texture),
+        ..default()
+    });
+
+    let card_mesh = meshes.add(Plane3d::default().mesh().size(2.5, 3.5).subdivisions(10));
+    let transform = Transform::from_translation(hand_transform.translation)
+        .with_rotation(hand_transform.rotation);
+
+    commands
+        .spawn((
+            Name::new("Card"),
+            MesaCardComponent {
+                pickable: true,
+                transform: None,
+                data: card.clone(),
+            },
+            MesaHand {
+                player: player_index,
+            },
+            Pickable::default(),
+            Mesh3d(card_mesh.clone()),
+            transform,
+        ))
+        .observe(on_hand_card_over)
+        .observe(on_hand_card_out)
+        .observe(on_hand_card_click)
+        .with_children(|parent| {
+            parent.spawn((Mesh3d(card_mesh.clone()), MeshMaterial3d(face_material)));
+            parent.spawn((
+                Mesh3d(card_mesh),
+                MeshMaterial3d(back_material),
+                Transform::IDENTITY.with_rotation(Quat::from_rotation_z(std::f32::consts::PI)),
+            ));
+        })
+        .id()
+}
+
+fn on_hand_card_click(click: On<Pointer<Click>>, mut ew_card: MessageWriter<CardPress>) {
+    ew_card.write(CardPress {
+        entity: click.event().entity,
+    });
+}
+
+fn on_hand_card_over(hover: On<Pointer<Over>>, mut ew_card: MessageWriter<CardHover>) {
+    ew_card.write(CardHover {
+        entity: hover.event().entity,
+    });
+}
+
+fn on_hand_card_out(out: On<Pointer<Out>>, mut ew_card: MessageWriter<CardOut>) {
+    ew_card.write(CardOut {
+        entity: out.event().entity,
+    });
 }
 
 fn player_index_for_entity(

@@ -45,9 +45,8 @@ pub struct PlayerBundle {
 }
 
 impl PlayerBundle {
-    pub fn new(handle: usize, cost_rate: f32, initial_deck: Vec<CardId>) -> Self {
-        let mut deck = Deck::new_with_seed(initial_deck, Deck::seed_for_handle(handle));
-        deck.shuffle();
+    pub fn new(handle: usize, cost_rate: f32, initial_deck: Vec<CardId>, match_seed: u64) -> Self {
+        let deck = Deck::new_with_seed(initial_deck, Deck::seed_for_handle(match_seed, handle));
 
         Self {
             name: Name::new("Player"),
@@ -86,9 +85,8 @@ pub struct OpponentBundle {
 }
 
 impl OpponentBundle {
-    pub fn new(handle: usize, cost_rate: f32, initial_deck: Vec<CardId>) -> Self {
-        let mut deck = Deck::new_with_seed(initial_deck, Deck::seed_for_handle(handle));
-        deck.shuffle();
+    pub fn new(handle: usize, cost_rate: f32, initial_deck: Vec<CardId>, match_seed: u64) -> Self {
+        let deck = Deck::new_with_seed(initial_deck, Deck::seed_for_handle(match_seed, handle));
 
         Self {
             name: Name::new("Opponent"),

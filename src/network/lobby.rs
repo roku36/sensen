@@ -8,8 +8,11 @@ use bevy_ggrs::prelude::*;
 use bevy_matchbox::matchbox_socket::WebRtcSocketBuilder;
 use bevy_matchbox::prelude::*;
 
-use super::{NetworkPlayers, SensenGgrsConfig};
-use crate::{game::GameMode, screens::Screen};
+use super::{NetworkPlayers, SensenGgrsConfig, match_seed_from_peers};
+use crate::{
+    game::{GameMode, MatchSeed},
+    screens::Screen,
+};
 
 /// Number of players in a match.
 const NUM_PLAYERS: usize = 2;
@@ -112,19 +115,28 @@ pub fn lobby_system(
         return;
     };
 
-    let players = socket.players();
+    let mut peer_ids: Vec<PeerId> = socket.connected_peers().collect();
+    peer_ids.push(local_peer_id);
+    peer_ids.sort();
 
     // Create GGRS P2P session
     let mut session_builder = SessionBuilder::<SensenGgrsConfig>::new()
         .with_num_players(NUM_PLAYERS)
         .with_input_delay(2);
 
-    // Add players
-    for (i, player) in players.iter().copied().enumerate() {
+    // Add players in a deterministic order across peers.
+    for (i, peer_id) in peer_ids.iter().copied().enumerate() {
+        let player = if peer_id == local_peer_id {
+            PlayerType::Local
+        } else {
+            PlayerType::Remote(peer_id)
+        };
         session_builder = session_builder
             .add_player(player, i)
             .expect("Failed to add player");
     }
+
+    let match_seed = match_seed_from_peers(&peer_ids);
 
     // Build session with socket
     let channel = socket.take_channel(0).unwrap();
@@ -133,27 +145,18 @@ pub fn lobby_system(
         .expect("Failed to start P2P session");
 
     commands.insert_resource(Session::P2P(session));
-    commands.insert_resource(build_network_players(local_peer_id, &players));
+    commands.insert_resource(build_network_players(local_peer_id, &peer_ids));
+    commands.insert_resource(MatchSeed(match_seed));
     *game_mode = GameMode::Online;
 
     // Transition to gameplay
     next_screen.set(Screen::Gameplay);
 }
 
-fn build_network_players(local_peer_id: PeerId, players: &[PlayerType<PeerId>]) -> NetworkPlayers {
-    let mut handles = Vec::with_capacity(players.len());
-
-    for player in players.iter() {
-        let peer_id = match player {
-            PlayerType::Local => local_peer_id,
-            PlayerType::Remote(id) | PlayerType::Spectator(id) => *id,
-        };
-        handles.push(peer_id);
-    }
-
+fn build_network_players(local_peer_id: PeerId, peer_ids: &[PeerId]) -> NetworkPlayers {
     NetworkPlayers {
         local_peer_id,
-        handles,
+        handles: peer_ids.to_vec(),
     }
 }
 
