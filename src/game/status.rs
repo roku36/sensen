@@ -6,8 +6,7 @@ use bevy_ggrs::{GgrsSchedule, GgrsTime};
 use crate::{
     AppSystems,
     game::{
-        BLOCK_DECAY_RATE, DamageKind, DamageMessage, DrawCardsMessage, GainBlockMessage,
-        GameplaySystems, PlayerHandle, is_offline, is_online, opponent_entity,
+        BLOCK_DECAY_RATE, GameplaySystems, PlayerHandle, is_offline, is_online, opponent_entity,
     },
     screens::Screen,
 };
@@ -364,9 +363,8 @@ fn tick_power_effects_offline(
     metallicize_query: Query<(Entity, &MetallicizeEffect)>,
     combust_query: Query<(Entity, &mut CombustEffect)>,
     brutality_query: Query<(Entity, &mut BrutalityEffect)>,
-    block_messages: MessageWriter<GainBlockMessage>,
-    damage_messages: MessageWriter<DamageMessage>,
-    draw_messages: MessageWriter<DrawCardsMessage>,
+    health_block_query: Query<(&mut super::Health, &mut super::Block)>,
+    deck_query: Query<(&mut super::Deck, &mut super::Hand, &mut super::DiscardPile)>,
 ) {
     tick_power_effects_delta(
         time.delta_secs(),
@@ -374,9 +372,8 @@ fn tick_power_effects_offline(
         metallicize_query,
         combust_query,
         brutality_query,
-        block_messages,
-        damage_messages,
-        draw_messages,
+        health_block_query,
+        deck_query,
     );
 }
 
@@ -386,9 +383,8 @@ fn tick_power_effects_online(
     metallicize_query: Query<(Entity, &MetallicizeEffect)>,
     combust_query: Query<(Entity, &mut CombustEffect)>,
     brutality_query: Query<(Entity, &mut BrutalityEffect)>,
-    block_messages: MessageWriter<GainBlockMessage>,
-    damage_messages: MessageWriter<DamageMessage>,
-    draw_messages: MessageWriter<DrawCardsMessage>,
+    health_block_query: Query<(&mut super::Health, &mut super::Block)>,
+    deck_query: Query<(&mut super::Deck, &mut super::Hand, &mut super::DiscardPile)>,
 ) {
     tick_power_effects_delta(
         time.delta_secs(),
@@ -396,9 +392,8 @@ fn tick_power_effects_online(
         metallicize_query,
         combust_query,
         brutality_query,
-        block_messages,
-        damage_messages,
-        draw_messages,
+        health_block_query,
+        deck_query,
     );
 }
 
@@ -408,44 +403,49 @@ fn tick_power_effects_delta(
     metallicize_query: Query<(Entity, &MetallicizeEffect)>,
     mut combust_query: Query<(Entity, &mut CombustEffect)>,
     mut brutality_query: Query<(Entity, &mut BrutalityEffect)>,
-    mut block_messages: MessageWriter<GainBlockMessage>,
-    mut damage_messages: MessageWriter<DamageMessage>,
-    mut draw_messages: MessageWriter<DrawCardsMessage>,
+    mut health_block_query: Query<(&mut super::Health, &mut super::Block)>,
+    mut deck_query: Query<(&mut super::Deck, &mut super::Hand, &mut super::DiscardPile)>,
 ) {
+    // Metallicize: directly add block
     for (entity, metallicize) in &metallicize_query {
         if metallicize.block_per_second > 0.0 {
-            block_messages.write(GainBlockMessage {
-                target: entity,
-                amount: metallicize.block_per_second * delta,
-            });
+            if let Ok((_, mut block)) = health_block_query.get_mut(entity) {
+                block.gain(metallicize.block_per_second * delta);
+            }
         }
     }
 
+    // Combust: periodic damage (direct application)
     for (entity, mut combust) in &mut combust_query {
         combust.timer += delta;
         while combust.timer >= 1.0 {
             combust.timer -= 1.0;
+
+            // Self damage (power damage bypasses block for self-inflicted)
             if combust.self_damage > 0.0 {
-                damage_messages.write(DamageMessage {
-                    target: entity,
-                    amount: combust.self_damage,
-                    source: Some(entity),
-                    kind: DamageKind::Power,
-                });
+                if let Ok((mut health, _)) = health_block_query.get_mut(entity) {
+                    health.take_damage(combust.self_damage);
+                }
             }
+
+            // Enemy damage (goes through block)
             if combust.enemy_damage > 0.0 {
                 if let Some(opponent) = opponent_entity(entity, &players) {
-                    damage_messages.write(DamageMessage {
-                        target: opponent,
-                        amount: combust.enemy_damage,
-                        source: Some(entity),
-                        kind: DamageKind::Power,
-                    });
+                    if let Ok((mut health, mut block)) = health_block_query.get_mut(opponent) {
+                        let mut remaining = combust.enemy_damage;
+                        let absorbed = remaining.min(block.current);
+                        block.current = (block.current - absorbed).max(0.0);
+                        remaining -= absorbed;
+                        if remaining > 0.0 {
+                            health.take_damage(remaining);
+                        }
+                    }
                 }
             }
         }
     }
 
+    // Brutality: periodic self damage and draw (direct application)
     for (entity, mut brutality) in &mut brutality_query {
         if brutality.interval <= 0.0 {
             continue;
@@ -453,19 +453,29 @@ fn tick_power_effects_delta(
         brutality.timer += delta;
         while brutality.timer >= brutality.interval {
             brutality.timer -= brutality.interval;
+
+            // Self damage (power damage)
             if brutality.self_damage > 0.0 {
-                damage_messages.write(DamageMessage {
-                    target: entity,
-                    amount: brutality.self_damage,
-                    source: Some(entity),
-                    kind: DamageKind::Power,
-                });
+                if let Ok((mut health, _)) = health_block_query.get_mut(entity) {
+                    health.take_damage(brutality.self_damage);
+                }
             }
+
+            // Draw cards directly
             if brutality.draw > 0 {
-                draw_messages.write(DrawCardsMessage {
-                    player: entity,
-                    count: brutality.draw as usize,
-                });
+                if let Ok((mut deck, mut hand, mut discard)) = deck_query.get_mut(entity) {
+                    for _ in 0..brutality.draw {
+                        // Reshuffle if needed
+                        if deck.is_empty() && !discard.is_empty() {
+                            let recycled = discard.take_all();
+                            deck.add_cards(recycled);
+                            deck.shuffle();
+                        }
+                        if let Some(card_id) = deck.draw() {
+                            hand.add_card(card_id);
+                        }
+                    }
+                }
             }
         }
     }
