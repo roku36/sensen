@@ -3,8 +3,9 @@
 use bevy::prelude::*;
 
 use super::{
-    Block, Cost, DRAW_COUNT, Deck, DiscardPile, GameResult, Hand, Health, LocalPlayer, Opponent,
-    PendingInput, Thorns,
+    Acceleration, BarricadeEffect, Block, BrutalityEffect, CombustEffect, CorruptionEffect, Cost,
+    DRAW_COUNT, Deck, DemonFormEffect, DiscardPile, GameResult, Hand, Health, LocalPlayer,
+    MetallicizeEffect, Opponent, PendingInput, RageEffect, Strength, Thorns, Vulnerable, Weak,
 };
 use crate::{
     AppSystems,
@@ -21,6 +22,13 @@ pub fn plugin(app: &mut App) {
             update_deck_display,
             update_health_display,
         )
+            .in_set(AppSystems::Update)
+            .run_if(in_state(Screen::Gameplay))
+            .run_if(in_state(GameResult::Playing)),
+    );
+    app.add_systems(
+        Update,
+        update_status_display
             .in_set(AppSystems::Update)
             .run_if(in_state(Screen::Gameplay))
             .run_if(in_state(GameResult::Playing)),
@@ -113,6 +121,14 @@ struct DrawButton;
 #[derive(Component)]
 struct DrawButtonText;
 
+/// Marker for player status effects display.
+#[derive(Component)]
+struct PlayerStatusDisplay;
+
+/// Marker for opponent status effects display.
+#[derive(Component)]
+struct OpponentStatusDisplay;
+
 fn spawn_game_ui(mut commands: Commands) {
     // Main game UI container
     commands.spawn((
@@ -193,6 +209,13 @@ fn spawn_game_ui(mut commands: Commands) {
                                 Text::new("Thorns: 0"),
                                 TextFont::from_font_size(16.0),
                                 TextColor(Color::srgb(1.0, 0.6, 0.3)),
+                            ),
+                            // Status effects display
+                            (
+                                OpponentStatusDisplay,
+                                Text::new(""),
+                                TextFont::from_font_size(14.0),
+                                TextColor(Color::srgb(0.9, 0.9, 0.5)),
                             ),
                         ],
                     ),
@@ -307,6 +330,13 @@ fn spawn_game_ui(mut commands: Commands) {
                                 Text::new("Thorns: 0"),
                                 TextFont::from_font_size(16.0),
                                 TextColor(Color::srgb(1.0, 0.6, 0.3)),
+                            ),
+                            // Status effects display
+                            (
+                                PlayerStatusDisplay,
+                                Text::new(""),
+                                TextFont::from_font_size(14.0),
+                                TextColor(Color::srgb(0.9, 0.9, 0.5)),
                             ),
                         ],
                     ),
@@ -456,6 +486,132 @@ fn update_health_display(
         for mut text in text_sets.p5().iter_mut() {
             text.0 = format!("Thorns: {:.0}", thorns.damage);
         }
+    }
+}
+
+/// System to update status effects display for both players.
+/// Shows the most important status effects.
+#[allow(clippy::type_complexity)]
+fn update_status_display(
+    player_query: Query<
+        (
+            &Strength,
+            &Vulnerable,
+            &Weak,
+            Option<&Acceleration>,
+            Option<&RageEffect>,
+            Option<&MetallicizeEffect>,
+            Option<&DemonFormEffect>,
+            Option<&BarricadeEffect>,
+            Option<&CombustEffect>,
+            Option<&CorruptionEffect>,
+            Option<&BrutalityEffect>,
+        ),
+        (With<LocalPlayer>, Without<Opponent>),
+    >,
+    opponent_query: Query<
+        (
+            &Strength,
+            &Vulnerable,
+            &Weak,
+            Option<&Acceleration>,
+            Option<&RageEffect>,
+            Option<&MetallicizeEffect>,
+            Option<&DemonFormEffect>,
+            Option<&BarricadeEffect>,
+            Option<&CombustEffect>,
+            Option<&CorruptionEffect>,
+            Option<&BrutalityEffect>,
+        ),
+        (With<Opponent>, Without<LocalPlayer>),
+    >,
+    mut text_query: ParamSet<(
+        Query<&mut Text, With<PlayerStatusDisplay>>,
+        Query<&mut Text, With<OpponentStatusDisplay>>,
+    )>,
+) {
+    // Update player status
+    if let Ok(components) = player_query.single() {
+        let status = build_status_string(components);
+        for mut text in text_query.p0().iter_mut() {
+            text.0.clone_from(&status);
+        }
+    }
+
+    // Update opponent status
+    if let Ok(components) = opponent_query.single() {
+        let status = build_status_string(components);
+        for mut text in text_query.p1().iter_mut() {
+            text.0.clone_from(&status);
+        }
+    }
+}
+
+#[allow(clippy::type_complexity)]
+fn build_status_string(
+    (strength, vulnerable, weak, accel, rage, metal, demon, barricade, combust, corrupt, brutal): (
+        &Strength,
+        &Vulnerable,
+        &Weak,
+        Option<&Acceleration>,
+        Option<&RageEffect>,
+        Option<&MetallicizeEffect>,
+        Option<&DemonFormEffect>,
+        Option<&BarricadeEffect>,
+        Option<&CombustEffect>,
+        Option<&CorruptionEffect>,
+        Option<&BrutalityEffect>,
+    ),
+) -> String {
+    let mut effects = Vec::new();
+
+    if strength.amount > 0.0 {
+        effects.push(format!("Str+{:.0}", strength.amount));
+    } else if strength.amount < 0.0 {
+        effects.push(format!("Str{:.0}", strength.amount));
+    }
+    if vulnerable.is_active() {
+        effects.push(format!("Vuln({:.1}s)", vulnerable.duration));
+    }
+    if weak.is_active() {
+        effects.push(format!("Weak({:.1}s)", weak.duration));
+    }
+    if let Some(a) = accel {
+        if a.remaining > 0.0 {
+            effects.push(format!("Accel+{:.1}({:.1}s)", a.bonus_rate, a.remaining));
+        }
+    }
+    if let Some(r) = rage {
+        if r.is_active() {
+            effects.push(format!("Rage({:.1}s)", r.duration));
+        }
+    }
+    if let Some(m) = metal {
+        effects.push(format!("Metal+{:.0}/s", m.block_per_second));
+    }
+    if let Some(d) = demon {
+        effects.push(format!("Demon+{:.1}str/s", d.strength_per_second));
+    }
+    if barricade.is_some() {
+        effects.push("Barricade".to_string());
+    }
+    if let Some(c) = combust {
+        effects.push(format!(
+            "Combust({:.0}/{:.0})",
+            c.self_damage, c.enemy_damage
+        ));
+    }
+    if corrupt.is_some() {
+        effects.push("Corrupt".to_string());
+    }
+    if let Some(b) = brutal {
+        effects.push(format!("Brutal({:.0}dmg/+{})", b.self_damage, b.draw));
+    }
+
+    if effects.is_empty() {
+        String::new()
+    } else {
+        effects.join(" | ")
     }
 }
 
