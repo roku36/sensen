@@ -1,7 +1,7 @@
 //! Cost system - accumulates over time.
 
 use bevy::prelude::*;
-use bevy_ggrs::GgrsSchedule;
+use bevy_ggrs::{GgrsSchedule, GgrsTime};
 
 use crate::{
     AppSystems,
@@ -12,7 +12,7 @@ use crate::{
 pub fn plugin(app: &mut App) {
     app.add_systems(
         Update,
-        (tick_acceleration, accumulate_cost)
+        (tick_acceleration_offline, accumulate_cost_offline)
             .chain()
             .in_set(AppSystems::TickTimers)
             .run_if(is_offline)
@@ -20,7 +20,7 @@ pub fn plugin(app: &mut App) {
     );
     app.add_systems(
         GgrsSchedule,
-        (tick_acceleration, accumulate_cost)
+        (tick_acceleration_online, accumulate_cost_online)
             .chain()
             .in_set(GameplaySystems::Tick)
             .run_if(is_online)
@@ -83,19 +83,41 @@ impl Acceleration {
 }
 
 /// System that accumulates cost over time for all entities with Cost component.
-fn accumulate_cost(time: Res<Time>, mut query: Query<&mut Cost>) {
-    let delta = time.delta_secs();
+fn accumulate_cost_offline(time: Res<Time>, query: Query<&mut Cost>) {
+    accumulate_cost_delta(time.delta_secs(), query);
+}
+
+fn accumulate_cost_online(time: Res<Time<GgrsTime>>, query: Query<&mut Cost>) {
+    accumulate_cost_delta(time.delta_secs(), query);
+}
+
+fn accumulate_cost_delta(delta: f32, mut query: Query<&mut Cost>) {
     for mut cost in &mut query {
         cost.current += cost.rate * delta;
     }
 }
 
-fn tick_acceleration(
+fn tick_acceleration_offline(
     time: Res<Time>,
+    commands: Commands,
+    query: Query<(Entity, &mut Cost, &mut Acceleration)>,
+) {
+    tick_acceleration_delta(time.delta_secs(), commands, query);
+}
+
+fn tick_acceleration_online(
+    time: Res<Time<GgrsTime>>,
+    commands: Commands,
+    query: Query<(Entity, &mut Cost, &mut Acceleration)>,
+) {
+    tick_acceleration_delta(time.delta_secs(), commands, query);
+}
+
+fn tick_acceleration_delta(
+    delta: f32,
     mut commands: Commands,
     mut query: Query<(Entity, &mut Cost, &mut Acceleration)>,
 ) {
-    let delta = time.delta_secs();
     for (entity, mut cost, mut accel) in &mut query {
         accel.remaining -= delta;
         if accel.remaining <= 0.0 {

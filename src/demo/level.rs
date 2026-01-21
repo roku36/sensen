@@ -6,7 +6,7 @@ use crate::{
     asset_tracking::LoadResource,
     audio::music,
     game::{DrawCardsMessage, GameMode, MatchSeed, OpponentBundle, PlayerBundle, create_test_deck},
-    network::{NetworkPlayers, seed_from_peer_id},
+    network::NetworkPlayers,
     screens::Screen,
 };
 
@@ -90,32 +90,12 @@ fn spawn_level_once(
         1
     };
 
-    let (player_seed, opponent_seed) = if *game_mode == GameMode::Online {
-        let Some(players) = network_players.as_ref() else {
-            return;
-        };
-        let Some(local_peer_id) = players.handles.get(local_handle).copied() else {
-            return;
-        };
-        let Some(opponent_peer_id) = players.handles.get(opponent_handle).copied() else {
-            return;
-        };
-        let base = match_seed.0;
-        (
-            base ^ seed_from_peer_id(local_peer_id),
-            base ^ seed_from_peer_id(opponent_peer_id),
-        )
-    } else {
-        (
-            crate::game::Deck::seed_for_handle(match_seed.0, local_handle),
-            crate::game::Deck::seed_for_handle(match_seed.0, opponent_handle),
-        )
-    };
+    let match_seed_value = match_seed.0;
 
     // Spawn local player with test deck, cost rate 1.0/sec
     let player_entity = commands
         .spawn((
-            PlayerBundle::new(local_handle, 1.0, create_test_deck(), player_seed),
+            PlayerBundle::new(local_handle, 1.0, create_test_deck(), match_seed_value),
             DespawnOnExit(Screen::Gameplay),
         ))
         .id();
@@ -123,7 +103,7 @@ fn spawn_level_once(
     // Spawn opponent with same HP and a matching deck
     let opponent_entity = commands
         .spawn((
-            OpponentBundle::new(opponent_handle, 1.0, create_test_deck(), opponent_seed),
+            OpponentBundle::new(opponent_handle, 1.0, create_test_deck(), match_seed_value),
             DespawnOnExit(Screen::Gameplay),
         ))
         .id();

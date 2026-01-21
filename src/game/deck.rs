@@ -253,6 +253,7 @@ fn handle_draw_cards(
             if deck.is_empty() && !discard.is_empty() {
                 let recycled = discard.take_all();
                 deck.add_cards(recycled);
+                deck.shuffle();
                 reshuffled_messages.write(DeckReshuffledMessage {
                     player: msg.player,
                     deck: deck.cards.clone(),

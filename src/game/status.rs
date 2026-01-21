@@ -1,7 +1,7 @@
 //! Status effects system - buffs, debuffs, and persistent effects.
 
 use bevy::prelude::*;
-use bevy_ggrs::GgrsSchedule;
+use bevy_ggrs::{GgrsSchedule, GgrsTime};
 
 use crate::{
     AppSystems,
@@ -15,7 +15,11 @@ use crate::{
 pub fn plugin(app: &mut App) {
     app.add_systems(
         Update,
-        (tick_status_effects, tick_power_effects, tick_block_decay)
+        (
+            tick_status_effects_offline,
+            tick_power_effects_offline,
+            tick_block_decay_offline,
+        )
             .chain()
             .in_set(AppSystems::TickTimers)
             .run_if(is_offline)
@@ -23,7 +27,11 @@ pub fn plugin(app: &mut App) {
     );
     app.add_systems(
         GgrsSchedule,
-        (tick_status_effects, tick_power_effects, tick_block_decay)
+        (
+            tick_status_effects_online,
+            tick_power_effects_online,
+            tick_block_decay_online,
+        )
             .chain()
             .in_set(GameplaySystems::Tick)
             .run_if(is_online)
@@ -282,15 +290,45 @@ impl BrutalityEffect {
 }
 
 /// System to tick down status effect durations.
-fn tick_status_effects(
+fn tick_status_effects_offline(
     time: Res<Time>,
+    vulnerable_query: Query<&mut Vulnerable>,
+    weak_query: Query<&mut Weak>,
+    rage_query: Query<&mut RageEffect>,
+    demon_query: Query<(&mut DemonFormEffect, &mut Strength)>,
+) {
+    tick_status_effects_delta(
+        time.delta_secs(),
+        vulnerable_query,
+        weak_query,
+        rage_query,
+        demon_query,
+    );
+}
+
+fn tick_status_effects_online(
+    time: Res<Time<GgrsTime>>,
+    vulnerable_query: Query<&mut Vulnerable>,
+    weak_query: Query<&mut Weak>,
+    rage_query: Query<&mut RageEffect>,
+    demon_query: Query<(&mut DemonFormEffect, &mut Strength)>,
+) {
+    tick_status_effects_delta(
+        time.delta_secs(),
+        vulnerable_query,
+        weak_query,
+        rage_query,
+        demon_query,
+    );
+}
+
+fn tick_status_effects_delta(
+    delta: f32,
     mut vulnerable_query: Query<&mut Vulnerable>,
     mut weak_query: Query<&mut Weak>,
     mut rage_query: Query<&mut RageEffect>,
     mut demon_query: Query<(&mut DemonFormEffect, &mut Strength)>,
 ) {
-    let delta = time.delta_secs();
-
     for mut vulnerable in &mut vulnerable_query {
         if vulnerable.duration > 0.0 {
             vulnerable.duration = (vulnerable.duration - delta).max(0.0);
@@ -320,8 +358,52 @@ fn tick_status_effects(
     }
 }
 
-fn tick_power_effects(
+fn tick_power_effects_offline(
     time: Res<Time>,
+    players: Query<(Entity, &PlayerHandle)>,
+    metallicize_query: Query<(Entity, &MetallicizeEffect)>,
+    combust_query: Query<(Entity, &mut CombustEffect)>,
+    brutality_query: Query<(Entity, &mut BrutalityEffect)>,
+    block_messages: MessageWriter<GainBlockMessage>,
+    damage_messages: MessageWriter<DamageMessage>,
+    draw_messages: MessageWriter<DrawCardsMessage>,
+) {
+    tick_power_effects_delta(
+        time.delta_secs(),
+        players,
+        metallicize_query,
+        combust_query,
+        brutality_query,
+        block_messages,
+        damage_messages,
+        draw_messages,
+    );
+}
+
+fn tick_power_effects_online(
+    time: Res<Time<GgrsTime>>,
+    players: Query<(Entity, &PlayerHandle)>,
+    metallicize_query: Query<(Entity, &MetallicizeEffect)>,
+    combust_query: Query<(Entity, &mut CombustEffect)>,
+    brutality_query: Query<(Entity, &mut BrutalityEffect)>,
+    block_messages: MessageWriter<GainBlockMessage>,
+    damage_messages: MessageWriter<DamageMessage>,
+    draw_messages: MessageWriter<DrawCardsMessage>,
+) {
+    tick_power_effects_delta(
+        time.delta_secs(),
+        players,
+        metallicize_query,
+        combust_query,
+        brutality_query,
+        block_messages,
+        damage_messages,
+        draw_messages,
+    );
+}
+
+fn tick_power_effects_delta(
+    delta: f32,
     players: Query<(Entity, &PlayerHandle)>,
     metallicize_query: Query<(Entity, &MetallicizeEffect)>,
     mut combust_query: Query<(Entity, &mut CombustEffect)>,
@@ -330,8 +412,6 @@ fn tick_power_effects(
     mut damage_messages: MessageWriter<DamageMessage>,
     mut draw_messages: MessageWriter<DrawCardsMessage>,
 ) {
-    let delta = time.delta_secs();
-
     for (entity, metallicize) in &metallicize_query {
         if metallicize.block_per_second > 0.0 {
             block_messages.write(GainBlockMessage {
@@ -392,12 +472,24 @@ fn tick_power_effects(
 }
 
 /// System to decay block over time (unless Barricade is active).
-fn tick_block_decay(
+fn tick_block_decay_offline(
     time: Res<Time>,
+    query: Query<&mut super::Block, Without<BarricadeEffect>>,
+) {
+    tick_block_decay_delta(time.delta_secs(), query);
+}
+
+fn tick_block_decay_online(
+    time: Res<Time<GgrsTime>>,
+    query: Query<&mut super::Block, Without<BarricadeEffect>>,
+) {
+    tick_block_decay_delta(time.delta_secs(), query);
+}
+
+fn tick_block_decay_delta(
+    delta: f32,
     mut query: Query<&mut super::Block, Without<BarricadeEffect>>,
 ) {
-    let delta = time.delta_secs();
-
     for mut block in &mut query {
         if block.current > 0.0 {
             block.current = (block.current - BLOCK_DECAY_RATE * delta).max(0.0);

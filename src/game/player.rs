@@ -109,7 +109,7 @@ impl OpponentBundle {
 /// Create a starter deck (Ironclad-style).
 /// Uses CardId variants for clarity.
 pub fn create_test_deck() -> Vec<CardId> {
-    vec![
+    let mut deck = vec![
         // === STARTER ATTACKS ===
         CardId::Strike,
         CardId::Strike,
@@ -136,7 +136,26 @@ pub fn create_test_deck() -> Vec<CardId> {
         // === POWERS ===
         CardId::Inflame,     // +2 permanent strength
         CardId::Metallicize, // 30 block/second
-    ]
+    ];
+    #[cfg(feature = "dev")]
+    {
+        // Add remaining power cards for dev coverage.
+        deck.extend([
+            CardId::Combust,
+            CardId::DarkEmbrace,
+            CardId::Evolve,
+            CardId::FeelNoPain,
+            CardId::FireBreathing,
+            CardId::Rupture,
+            CardId::Barricade,
+            CardId::Berserk,
+            CardId::Brutality,
+            CardId::Corruption,
+            CardId::DemonForm,
+            CardId::Juggernaut,
+        ]);
+    }
+    deck
 }
 
 pub fn opponent_entity(player: Entity, players: &Query<(Entity, &PlayerHandle)>) -> Option<Entity> {

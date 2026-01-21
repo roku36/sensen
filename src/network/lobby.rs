@@ -4,6 +4,7 @@ use std::ops::DerefMut;
 
 use bevy::prelude::*;
 use bevy_ggrs::Session;
+use bevy_ggrs::ggrs::SessionState;
 use bevy_ggrs::prelude::*;
 use bevy_matchbox::matchbox_socket::WebRtcSocketBuilder;
 use bevy_matchbox::prelude::*;
@@ -74,6 +75,7 @@ pub fn lobby_startup(mut commands: Commands) {
 pub fn lobby_system(
     mut commands: Commands,
     socket: Option<ResMut<MatchboxSocket>>,
+    session: Option<Res<Session<SensenGgrsConfig>>>,
     mut next_screen: ResMut<NextState<Screen>>,
     mut lobby_text: Query<&mut Text, With<LobbyText>>,
     mut game_mode: ResMut<GameMode>,
@@ -87,6 +89,24 @@ pub fn lobby_system(
         warn!("Socket dropped");
         return;
     };
+
+    if let Some(session) = session.as_ref() {
+        let running = matches!(
+            session.as_ref(),
+            Session::P2P(s) if s.current_state() == SessionState::Running
+        );
+        for mut text in &mut lobby_text {
+            text.0 = if running {
+                "Synchronized. Starting game...".to_string()
+            } else {
+                "Synchronizing...".to_string()
+            };
+        }
+        if running {
+            next_screen.set(Screen::Gameplay);
+        }
+        return;
+    }
 
     // Get socket reference for method calls
     let socket = socket.deref_mut();
@@ -108,7 +128,7 @@ pub fn lobby_system(
         return;
     }
 
-    info!("All players connected! Starting game...");
+    info!("All players connected. Starting synchronization...");
 
     let Some(local_peer_id) = socket.id() else {
         warn!("Matchbox socket has no local peer id yet.");
@@ -148,9 +168,6 @@ pub fn lobby_system(
     commands.insert_resource(build_network_players(local_peer_id, &peer_ids));
     commands.insert_resource(MatchSeed(match_seed));
     *game_mode = GameMode::Online;
-
-    // Transition to gameplay
-    next_screen.set(Screen::Gameplay);
 }
 
 fn build_network_players(local_peer_id: PeerId, peer_ids: &[PeerId]) -> NetworkPlayers {
