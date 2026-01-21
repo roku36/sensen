@@ -3,8 +3,8 @@
 use bevy::prelude::*;
 
 use super::{
-    Block, Cost, DRAW_COST, DRAW_COUNT, Deck, DiscardPile, GameResult, Health, LocalPlayer,
-    Opponent, PendingInput, Thorns,
+    Block, Cost, DRAW_COUNT, Deck, DiscardPile, GameResult, Hand, Health, LocalPlayer, Opponent,
+    PendingInput, Thorns,
 };
 use crate::{
     AppSystems,
@@ -108,6 +108,10 @@ struct OpponentThornsDisplay;
 /// Marker for the draw button.
 #[derive(Component)]
 struct DrawButton;
+
+/// Marker for draw button text (to show cost).
+#[derive(Component)]
+struct DrawButtonText;
 
 fn spawn_game_ui(mut commands: Commands) {
     // Main game UI container
@@ -333,10 +337,8 @@ fn spawn_game_ui(mut commands: Commands) {
                                 BorderRadius::all(px(8)),
                                 BackgroundColor(Color::srgb(0.4, 0.2, 0.6)),
                                 children![(
-                                    Text::new(format!(
-                                        "Draw {}\n({:.1}) [D]",
-                                        DRAW_COUNT, DRAW_COST
-                                    )),
+                                    DrawButtonText,
+                                    Text::new(format!("Draw {}\n(0) [D]", DRAW_COUNT)),
                                     TextFont::from_font_size(14.0),
                                     TextColor(Color::WHITE),
                                 ),],
@@ -363,11 +365,33 @@ fn update_cost_display(
 }
 
 fn update_deck_display(
-    player_query: Query<(&Deck, &DiscardPile), With<LocalPlayer>>,
-    mut deck_query: Query<&mut Text, (With<DeckDisplay>, Without<DiscardDisplay>)>,
-    mut discard_query: Query<&mut Text, (With<DiscardDisplay>, Without<DeckDisplay>)>,
+    player_query: Query<(&Deck, &DiscardPile, &Hand), With<LocalPlayer>>,
+    mut deck_query: Query<
+        &mut Text,
+        (
+            With<DeckDisplay>,
+            Without<DiscardDisplay>,
+            Without<DrawButtonText>,
+        ),
+    >,
+    mut discard_query: Query<
+        &mut Text,
+        (
+            With<DiscardDisplay>,
+            Without<DeckDisplay>,
+            Without<DrawButtonText>,
+        ),
+    >,
+    mut draw_button_query: Query<
+        &mut Text,
+        (
+            With<DrawButtonText>,
+            Without<DeckDisplay>,
+            Without<DiscardDisplay>,
+        ),
+    >,
 ) {
-    let Ok((deck, discard)) = player_query.single() else {
+    let Ok((deck, discard, hand)) = player_query.single() else {
         return;
     };
 
@@ -377,6 +401,12 @@ fn update_deck_display(
 
     for mut text in &mut discard_query {
         text.0 = format!("Discard: {}", discard.cards.len());
+    }
+
+    // Draw cost = hand size (0 cards = free draw)
+    let draw_cost = hand.len();
+    for mut text in &mut draw_button_query {
+        text.0 = format!("Draw {}\n({}) [D]", DRAW_COUNT, draw_cost);
     }
 }
 

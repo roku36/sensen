@@ -8,8 +8,8 @@ use crate::{
 };
 
 use super::{
-    CardRegistry, CardType, CorruptionEffect, Cost, DRAW_COST, DRAW_COUNT, DrawCardsMessage,
-    GameResult, GameplaySystems, Hand, LocalPlayer, MAX_HAND_SIZE, PlayCardMessage, is_offline,
+    CardRegistry, CardType, CorruptionEffect, Cost, DRAW_COUNT, DrawCardsMessage, GameResult,
+    GameplaySystems, Hand, LocalPlayer, MAX_HAND_SIZE, PlayCardMessage, is_offline,
 };
 use crate::screens::Screen;
 
@@ -97,7 +97,9 @@ pub(crate) fn apply_local_input_flags(
     draw_messages: &mut MessageWriter<DrawCardsMessage>,
     play_messages: &mut MessageWriter<PlayCardMessage>,
 ) {
-    if flags & INPUT_DRAW != 0 && cost.try_spend(DRAW_COST) {
+    // Draw cost = current hand size (0 cards = free draw)
+    let draw_cost = hand.len() as f32;
+    if flags & INPUT_DRAW != 0 && cost.try_spend(draw_cost) {
         draw_messages.write(DrawCardsMessage {
             player: player_entity,
             count: DRAW_COUNT,
