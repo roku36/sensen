@@ -3,7 +3,11 @@
 use bevy::{ecs::message::Message, prelude::*};
 use bevy_ggrs::GgrsSchedule;
 
-use super::CardId;
+use super::{CardEffect, CardId};
+use crate::game::{
+    CardRegistry, CardType, CorruptionEffect, DamageKind, DamageMessage, EvolveEffect,
+    FireBreathingEffect, PlayerHandle, opponent_entity,
+};
 use crate::{
     AppSystems,
     game::{GameplaySystems, is_offline, is_online},
@@ -14,10 +18,12 @@ pub fn plugin(app: &mut App) {
     app.add_message::<DrawCardsMessage>();
     app.add_message::<PlayCardMessage>();
     app.add_message::<CardPlayedMessage>();
+    app.add_message::<CardExhaustedMessage>();
     app.add_message::<DeckReshuffledMessage>();
     app.clear_messages_on_exit::<DrawCardsMessage>(Screen::Gameplay)
         .clear_messages_on_exit::<PlayCardMessage>(Screen::Gameplay)
         .clear_messages_on_exit::<CardPlayedMessage>(Screen::Gameplay)
+        .clear_messages_on_exit::<CardExhaustedMessage>(Screen::Gameplay)
         .clear_messages_on_exit::<DeckReshuffledMessage>(Screen::Gameplay);
     app.add_systems(
         Update,
@@ -55,6 +61,13 @@ pub struct PlayCardMessage {
 /// Message fired when a card effect should be applied.
 #[derive(Message)]
 pub struct CardPlayedMessage {
+    pub player: Entity,
+    pub card_id: super::CardId,
+}
+
+/// Message fired when a card is exhausted.
+#[derive(Message)]
+pub struct CardExhaustedMessage {
     pub player: Entity,
     pub card_id: super::CardId,
 }
@@ -203,13 +216,35 @@ fn handle_draw_cards(
     mut messages: MessageReader<DrawCardsMessage>,
     mut query: Query<(&mut Deck, &mut Hand, &mut DiscardPile)>,
     mut reshuffled_messages: MessageWriter<DeckReshuffledMessage>,
+    card_registry: Res<CardRegistry>,
+    players: Query<(Entity, &PlayerHandle)>,
+    evolve_query: Query<&EvolveEffect>,
+    fire_breathing_query: Query<&FireBreathingEffect>,
+    mut damage_messages: MessageWriter<DamageMessage>,
 ) {
     for msg in messages.read() {
         let Ok((mut deck, mut hand, mut discard)) = query.get_mut(msg.player) else {
             continue;
         };
 
-        for _ in 0..msg.count {
+        let evolve_bonus = evolve_query
+            .get(msg.player)
+            .map(|effect| effect.draw_on_status as usize)
+            .unwrap_or(0);
+        let fire_damage = fire_breathing_query
+            .get(msg.player)
+            .map(|effect| effect.damage_on_status_draw)
+            .unwrap_or(0.0);
+        let fire_target = if fire_damage > 0.0 {
+            opponent_entity(msg.player, &players)
+        } else {
+            None
+        };
+
+        let mut draws_remaining = msg.count;
+        while draws_remaining > 0 {
+            draws_remaining -= 1;
+
             // If deck is empty, shuffle discard pile back into deck
             if deck.is_empty() && !discard.is_empty() {
                 let recycled = discard.take_all();
@@ -221,9 +256,27 @@ fn handle_draw_cards(
                 });
             }
 
-            // Draw a card if possible
-            if let Some(card_id) = deck.draw() {
-                hand.add_card(card_id);
+            let Some(card_id) = deck.draw() else {
+                break;
+            };
+            hand.add_card(card_id);
+
+            let is_status = card_registry
+                .get(card_id)
+                .map(|def| def.card_type == CardType::Status)
+                .unwrap_or(false);
+            if is_status {
+                if evolve_bonus > 0 {
+                    draws_remaining += evolve_bonus;
+                }
+                if let Some(target) = fire_target {
+                    damage_messages.write(DamageMessage {
+                        target,
+                        amount: fire_damage,
+                        source: Some(msg.player),
+                        kind: DamageKind::Power,
+                    });
+                }
             }
         }
     }
@@ -234,6 +287,9 @@ fn handle_play_card(
     mut messages: MessageReader<PlayCardMessage>,
     mut query: Query<(&mut Hand, &mut Deck)>,
     mut card_played_messages: MessageWriter<CardPlayedMessage>,
+    mut card_exhausted_messages: MessageWriter<CardExhaustedMessage>,
+    card_registry: Res<CardRegistry>,
+    corruption_query: Query<&CorruptionEffect>,
 ) {
     for msg in messages.read() {
         let Ok((mut hand, mut deck)) = query.get_mut(msg.player) else {
@@ -241,12 +297,39 @@ fn handle_play_card(
         };
 
         if let Some(card_id) = hand.remove_card(msg.hand_index) {
-            deck.add_cards(vec![card_id]);
+            let mut return_to_deck = true;
+            let mut counts_as_exhaust = false;
+
+            if let Some(card_def) = card_registry.get(card_id) {
+                if card_def.card_type == CardType::Power {
+                    return_to_deck = false;
+                }
+                if matches!(card_def.effect, CardEffect::Exhaust) {
+                    return_to_deck = false;
+                    counts_as_exhaust = true;
+                }
+                if card_def.card_type == CardType::Skill && corruption_query.get(msg.player).is_ok()
+                {
+                    return_to_deck = false;
+                    counts_as_exhaust = true;
+                }
+            }
+
+            if return_to_deck {
+                deck.add_cards(vec![card_id]);
+            }
             // Fire message to apply card effect
             card_played_messages.write(CardPlayedMessage {
                 player: msg.player,
                 card_id,
             });
+
+            if counts_as_exhaust {
+                card_exhausted_messages.write(CardExhaustedMessage {
+                    player: msg.player,
+                    card_id,
+                });
+            }
         }
     }
 }

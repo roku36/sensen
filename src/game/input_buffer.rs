@@ -8,8 +8,8 @@ use crate::{
 };
 
 use super::{
-    CardRegistry, Cost, DRAW_COST, DRAW_COUNT, DrawCardsMessage, GameResult, GameplaySystems, Hand,
-    LocalPlayer, MAX_HAND_SIZE, PlayCardMessage, is_offline,
+    CardRegistry, CardType, CorruptionEffect, Cost, DRAW_COST, DRAW_COUNT, DrawCardsMessage,
+    GameResult, GameplaySystems, Hand, LocalPlayer, MAX_HAND_SIZE, PlayCardMessage, is_offline,
 };
 use crate::screens::Screen;
 
@@ -58,7 +58,10 @@ fn capture_keyboard_input(keyboard: Res<ButtonInput<KeyCode>>, mut pending: ResM
 
 fn apply_pending_inputs(
     mut pending: ResMut<PendingInput>,
-    mut player_query: Query<(Entity, &Hand, &mut Cost), With<LocalPlayer>>,
+    mut player_query: Query<
+        (Entity, &Hand, &mut Cost, Option<&CorruptionEffect>),
+        With<LocalPlayer>,
+    >,
     card_registry: Res<CardRegistry>,
     mut play_messages: MessageWriter<PlayCardMessage>,
     mut draw_messages: MessageWriter<DrawCardsMessage>,
@@ -68,7 +71,7 @@ fn apply_pending_inputs(
         return;
     }
 
-    let Ok((player_entity, hand, mut cost)) = player_query.single_mut() else {
+    let Ok((player_entity, hand, mut cost, corruption)) = player_query.single_mut() else {
         return;
     };
 
@@ -77,6 +80,7 @@ fn apply_pending_inputs(
         player_entity,
         hand,
         &mut cost,
+        corruption.is_some(),
         &card_registry,
         &mut draw_messages,
         &mut play_messages,
@@ -88,6 +92,7 @@ pub(crate) fn apply_local_input_flags(
     player_entity: Entity,
     hand: &Hand,
     cost: &mut Cost,
+    corruption_active: bool,
     card_registry: &CardRegistry,
     draw_messages: &mut MessageWriter<DrawCardsMessage>,
     play_messages: &mut MessageWriter<PlayCardMessage>,
@@ -106,7 +111,13 @@ pub(crate) fn apply_local_input_flags(
         if flags & flag != 0 {
             if let Some(card_id) = hand.cards.get(i).copied() {
                 if let Some(card_def) = card_registry.get(card_id) {
-                    if cost.try_spend(card_def.cost) {
+                    let effective_cost =
+                        if corruption_active && card_def.card_type == CardType::Skill {
+                            0.0
+                        } else {
+                            card_def.cost
+                        };
+                    if cost.try_spend(effective_cost) {
                         play_messages.write(PlayCardMessage {
                             player: player_entity,
                             hand_index: i,

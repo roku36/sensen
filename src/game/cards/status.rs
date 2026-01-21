@@ -7,7 +7,7 @@ use super::{CardDef, CardEffect, CardId, CardRarity, CardRegistry, CardType};
 pub fn register_status_cards(registry: &mut CardRegistry) {
     // 300: Dazed - Unplayable
     registry.register(CardDef {
-        id: CardId(300),
+        id: CardId::Dazed,
         name: "Dazed".to_string(),
         description: "Unplayable.".to_string(),
         card_type: CardType::Status,
@@ -18,7 +18,7 @@ pub fn register_status_cards(registry: &mut CardRegistry) {
 
     // 301: Wound - Unplayable
     registry.register(CardDef {
-        id: CardId(301),
+        id: CardId::Wound,
         name: "Wound".to_string(),
         description: "Unplayable.".to_string(),
         card_type: CardType::Status,
@@ -29,7 +29,7 @@ pub fn register_status_cards(registry: &mut CardRegistry) {
 
     // 302: Burn - Deal damage to self when drawn
     registry.register(CardDef {
-        id: CardId(302),
+        id: CardId::Burn,
         name: "Burn".to_string(),
         description: "Unplayable. Take 20 damage at end of turn.".to_string(),
         card_type: CardType::Status,
@@ -40,7 +40,7 @@ pub fn register_status_cards(registry: &mut CardRegistry) {
 
     // 303: Slimed - Costs 1, does nothing
     registry.register(CardDef {
-        id: CardId(303),
+        id: CardId::Slimed,
         name: "Slimed".to_string(),
         description: "Exhaust.".to_string(),
         card_type: CardType::Status,
@@ -51,7 +51,7 @@ pub fn register_status_cards(registry: &mut CardRegistry) {
 
     // 304: Void - Lose all energy when drawn
     registry.register(CardDef {
-        id: CardId(304),
+        id: CardId::Void,
         name: "Void".to_string(),
         description: "Unplayable. Lose all cost when drawn.".to_string(),
         card_type: CardType::Status,

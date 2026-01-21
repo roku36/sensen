@@ -109,52 +109,47 @@ impl OpponentBundle {
 }
 
 /// Create a starter deck (Ironclad-style).
-/// Uses new card IDs:
-/// - Attack: 1-99
-/// - Skill: 100-199
-/// - Power: 200-299
-/// - Status: 300-399
+/// Uses CardId variants for clarity.
 pub fn create_test_deck() -> Vec<CardId> {
     vec![
         // === STARTER ATTACKS ===
-        // 4x Strike (ID: 1) - 60 damage
-        CardId(1),
-        CardId(1),
-        CardId(1),
-        CardId(1),
-        // 1x Bash (ID: 2) - 80 damage + 2 Vulnerable
-        CardId(2),
+        CardId::Strike,
+        CardId::Strike,
+        CardId::Strike,
+        CardId::Strike, // 4x Strike - 60 damage each
+        CardId::Bash,   // 1x Bash - 80 damage + 2 Vulnerable
         // === STARTER SKILLS ===
-        // 4x Defend (ID: 100) - 50 block
-        CardId(100),
-        CardId(100),
-        CardId(100),
-        CardId(100),
+        CardId::Defend,
+        CardId::Defend,
+        CardId::Defend,
+        CardId::Defend, // 4x Defend - 50 block each
         // === COMMON ATTACKS ===
-        // 1x Iron Wave (ID: 7) - 50 damage + 50 block
-        CardId(7),
-        // 1x Pommel Strike (ID: 8) - 90 damage + draw 1
-        CardId(8),
-        // 1x Twin Strike (ID: 11) - 50 damage x2
-        CardId(11),
-        // 1x Clothesline (ID: 5) - 120 damage + 2 weak
-        CardId(5),
+        CardId::IronWave,     // 50 damage + 50 block
+        CardId::PommelStrike, // 90 damage + draw 1
+        CardId::TwinStrike,   // 50 damage x2
+        CardId::Clothesline,  // 120 damage + 2 weak
         // === COMMON SKILLS ===
-        // 1x Shrug It Off (ID: 104) - 80 block + draw 1
-        CardId(104),
-        // 1x Flex (ID: 102) - +2 strength (temporary)
-        CardId(102),
+        CardId::ShrugItOff, // 80 block + draw 1
+        CardId::Flex,       // +2 strength (temporary)
         // === UNCOMMON ===
-        // 1x Body Slam (ID: 13) - damage = current block
-        CardId(13),
-        // 1x Flame Barrier (ID: 112) - 120 block + 4 thorns
-        CardId(112),
-        // 1x Spot Weakness (ID: 122) - +3 strength
-        CardId(122),
+        CardId::BodySlam,     // damage = current block
+        CardId::FlameBarrier, // 120 block + 4 thorns
+        CardId::SpotWeakness, // +3 strength
         // === POWERS ===
-        // 1x Inflame (ID: 205) - +2 permanent strength
-        CardId(205),
-        // 1x Metallicize (ID: 206) - 30 block/second
-        CardId(206),
+        CardId::Inflame,     // +2 permanent strength
+        CardId::Metallicize, // 30 block/second
     ]
+}
+
+pub fn opponent_entity(player: Entity, players: &Query<(Entity, &PlayerHandle)>) -> Option<Entity> {
+    let Ok((_, handle)) = players.get(player) else {
+        return None;
+    };
+    players.iter().find_map(|(entity, other)| {
+        if other.0 != handle.0 {
+            Some(entity)
+        } else {
+            None
+        }
+    })
 }

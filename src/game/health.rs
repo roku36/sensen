@@ -3,7 +3,9 @@
 use bevy::{ecs::message::Message, prelude::*};
 use bevy_ggrs::GgrsSchedule;
 
-use super::{LocalPlayer, Opponent};
+use super::{
+    JuggernautEffect, LocalPlayer, Opponent, PlayerHandle, RuptureEffect, Strength, opponent_entity,
+};
 use crate::{
     AppSystems,
     game::{GameplaySystems, is_offline, is_online},
@@ -37,6 +39,7 @@ pub fn plugin(app: &mut App) {
         Update,
         (
             handle_gain_block,
+            handle_juggernaut,
             handle_gain_thorns,
             handle_damage,
             handle_thorns_damage,
@@ -54,6 +57,7 @@ pub fn plugin(app: &mut App) {
         GgrsSchedule,
         (
             handle_gain_block,
+            handle_juggernaut,
             handle_gain_thorns,
             handle_damage,
             handle_thorns_damage,
@@ -142,7 +146,8 @@ pub struct DamageMessage {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DamageKind {
-    Direct,
+    Attack,
+    Power,
     Thorns,
 }
 
@@ -203,6 +208,8 @@ fn handle_gain_thorns(
 fn handle_damage(
     mut messages: MessageReader<DamageMessage>,
     mut health_query: Query<(&mut Health, Option<&mut Block>, Option<&Thorns>)>,
+    rupture_query: Query<&RuptureEffect>,
+    mut strength_query: Query<&mut Strength>,
     mut thorns_messages: MessageWriter<ThornsDamageMessage>,
 ) {
     for msg in messages.read() {
@@ -221,14 +228,22 @@ fn handle_damage(
             health.take_damage(remaining);
         }
 
-        if msg.kind == DamageKind::Direct {
+        if msg.kind == DamageKind::Attack {
             if let (Some(thorns), Some(source)) = (thorns, msg.source) {
-                if thorns.damage > 0.0 && msg.amount > 0.0 {
+                if source != msg.target && thorns.damage > 0.0 && msg.amount > 0.0 {
                     thorns_messages.write(ThornsDamageMessage {
                         target: source,
                         amount: thorns.damage,
                         source: msg.target,
                     });
+                }
+            }
+        }
+
+        if msg.kind == DamageKind::Power && msg.amount > 0.0 && msg.source == Some(msg.target) {
+            if let Ok(rupture) = rupture_query.get(msg.target) {
+                if let Ok(mut strength) = strength_query.get_mut(msg.target) {
+                    strength.gain(rupture.strength_on_self_damage);
                 }
             }
         }
@@ -253,6 +268,28 @@ fn handle_thorns_damage(
             amount: msg.amount,
             source: Some(msg.source),
             kind: DamageKind::Thorns,
+        });
+    }
+}
+
+fn handle_juggernaut(
+    mut messages: MessageReader<GainBlockMessage>,
+    players: Query<(Entity, &PlayerHandle)>,
+    juggernaut_query: Query<&JuggernautEffect>,
+    mut damage_messages: MessageWriter<DamageMessage>,
+) {
+    for msg in messages.read() {
+        let Ok(effect) = juggernaut_query.get(msg.target) else {
+            continue;
+        };
+        let Some(opponent) = opponent_entity(msg.target, &players) else {
+            continue;
+        };
+        damage_messages.write(DamageMessage {
+            target: opponent,
+            amount: effect.damage_on_block,
+            source: Some(msg.target),
+            kind: DamageKind::Power,
         });
     }
 }

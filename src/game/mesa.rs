@@ -13,8 +13,8 @@ use bevy_tweening::TweenAnim;
 use std::{cmp::Ordering, num::NonZeroU32};
 
 use super::{
-    CardEffect, CardId, CardRegistry, Deck, DeckReshuffledMessage, GameResult, Hand, LocalPlayer,
-    Opponent, PendingInput, PlayCardMessage,
+    CardEffect, CardId, CardRegistry, CardType, Deck, DeckReshuffledMessage, GameResult, Hand,
+    LocalPlayer, Opponent, PendingInput, PlayCardMessage,
 };
 use crate::{AppSystems, input::card_flag, screens::Screen};
 
@@ -54,7 +54,7 @@ struct MesaCard {
 impl Default for MesaCard {
     fn default() -> Self {
         Self {
-            card_id: CardId(0),
+            card_id: CardId::Unknown,
             front: CARD_FRONT_DAMAGE.to_string(),
             back: CARD_BACK_IMAGE.to_string(),
         }
@@ -749,7 +749,9 @@ fn mesa_card_from_id(card_id: CardId, registry: &CardRegistry) -> MesaCard {
             CardEffect::Strength(_) | CardEffect::DoubleStrength | CardEffect::DemonForm(_) => {
                 CARD_FRONT_DAMAGE
             }
-            CardEffect::Vulnerable(_) | CardEffect::Weak(_) => CARD_FRONT_DAMAGE,
+            CardEffect::Vulnerable(_) | CardEffect::SelfVulnerable(_) | CardEffect::Weak(_) => {
+                CARD_FRONT_DAMAGE
+            }
             CardEffect::Accelerate { .. } => CARD_FRONT_DRAW,
             CardEffect::BodySlam => CARD_FRONT_DAMAGE,
             CardEffect::Bloodletting(_) => CARD_FRONT_DAMAGE,
@@ -757,6 +759,13 @@ fn mesa_card_from_id(card_id: CardId, registry: &CardRegistry) -> MesaCard {
                 CARD_FRONT_HEAL
             }
             CardEffect::Combust { .. } | CardEffect::Juggernaut(_) => CARD_FRONT_DAMAGE,
+            CardEffect::DarkEmbrace { .. } | CardEffect::Evolve { .. } | CardEffect::Corruption => {
+                CARD_FRONT_DRAW
+            }
+            CardEffect::FeelNoPain { .. } => CARD_FRONT_HEAL,
+            CardEffect::FireBreathing { .. }
+            | CardEffect::Rupture { .. }
+            | CardEffect::Brutality { .. } => CARD_FRONT_DAMAGE,
             CardEffect::Exhaust | CardEffect::AddStatus(_) => CARD_FRONT_DRAW,
             CardEffect::Combo(_) => CARD_FRONT_DAMAGE,
         })
@@ -811,10 +820,14 @@ fn unified_effect_kind(effect: &CardEffect) -> Option<EffectKind> {
         CardEffect::Block(_) | CardEffect::DoubleBlock => Some(EffectKind::Block),
         CardEffect::Thorns(_) => Some(EffectKind::Thorns),
         CardEffect::Accelerate { .. } => Some(EffectKind::Accelerate),
+        CardEffect::DarkEmbrace { .. } | CardEffect::Evolve { .. } => Some(EffectKind::Draw),
+        CardEffect::FeelNoPain { .. } => Some(EffectKind::Block),
+        CardEffect::FireBreathing { .. } => Some(EffectKind::Damage),
         CardEffect::Strength(_)
         | CardEffect::DoubleStrength
         | CardEffect::DemonForm(_)
         | CardEffect::Vulnerable(_)
+        | CardEffect::SelfVulnerable(_)
         | CardEffect::Weak(_)
         | CardEffect::Bloodletting(_)
         | CardEffect::Rage(_)
@@ -822,6 +835,9 @@ fn unified_effect_kind(effect: &CardEffect) -> Option<EffectKind> {
         | CardEffect::Combust { .. }
         | CardEffect::Barricade
         | CardEffect::Juggernaut(_)
+        | CardEffect::Rupture { .. }
+        | CardEffect::Corruption
+        | CardEffect::Brutality { .. }
         | CardEffect::Exhaust
         | CardEffect::AddStatus(_) => None,
         CardEffect::Combo(effects) => {
@@ -855,6 +871,9 @@ fn effect_lines(effect: &CardEffect, lines: &mut Vec<String>) {
         CardEffect::Thorns(amount) => lines.push(format!("THORNS {:.0}", amount)),
         CardEffect::Strength(amount) => lines.push(format!("STR +{:.0}", amount)),
         CardEffect::Vulnerable(duration) => lines.push(format!("VULN {:.0}s", duration)),
+        CardEffect::SelfVulnerable(duration) => {
+            lines.push(format!("SELF VULN {:.0}s", duration));
+        }
         CardEffect::Weak(duration) => lines.push(format!("WEAK {:.0}s", duration)),
         CardEffect::Accelerate {
             bonus_rate,
@@ -879,6 +898,20 @@ fn effect_lines(effect: &CardEffect, lines: &mut Vec<String>) {
         CardEffect::DemonForm(str_per_sec) => lines.push(format!("DEMON +{:.0}STR/s", str_per_sec)),
         CardEffect::Barricade => lines.push("BARRICADE".to_string()),
         CardEffect::Juggernaut(dmg) => lines.push(format!("JUGG {:.0}", dmg)),
+        CardEffect::DarkEmbrace { draw } => lines.push(format!("EXH DRAW +{}", draw)),
+        CardEffect::Evolve { draw } => lines.push(format!("STATUS DRAW +{}", draw)),
+        CardEffect::FeelNoPain { block } => lines.push(format!("EXH BLOCK +{:.0}", block)),
+        CardEffect::FireBreathing { damage } => lines.push(format!("STATUS DMG {:.0}", damage)),
+        CardEffect::Rupture { strength } => lines.push(format!("RUPTURE +{:.0} STR", strength)),
+        CardEffect::Corruption => lines.push("SKILL 0C EXH".to_string()),
+        CardEffect::Brutality {
+            self_damage,
+            draw,
+            interval,
+        } => {
+            lines.push(format!("LOSE {:.0} HP/{:.0}s", self_damage, interval));
+            lines.push(format!("DRAW {}/{:.0}s", draw, interval));
+        }
         CardEffect::Exhaust => lines.push("EXHAUST".to_string()),
         CardEffect::AddStatus(_) => lines.push("+STATUS".to_string()),
         CardEffect::Combo(effects) => {
@@ -898,6 +931,16 @@ fn effect_color(effect: &CardEffect) -> Srgba {
         Some(EffectKind::Thorns) => Srgba::rgb(1.0, 0.6, 0.2),
         Some(EffectKind::Accelerate) => Srgba::rgb(1.0, 0.9, 0.2),
         None => Srgba::rgb(0.9, 0.9, 0.9),
+    }
+}
+
+/// Get card type display text and color.
+fn card_type_display(card_type: CardType) -> (&'static str, Srgba) {
+    match card_type {
+        CardType::Attack => ("ATK", Srgba::rgb(1.0, 0.3, 0.3)),
+        CardType::Skill => ("SKL", Srgba::rgb(0.3, 0.8, 1.0)),
+        CardType::Power => ("PWR", Srgba::rgb(1.0, 0.6, 0.2)),
+        CardType::Status => ("STS", Srgba::rgb(0.5, 0.5, 0.5)),
     }
 }
 
@@ -935,6 +978,9 @@ fn add_effect_text_to_cards(
         // Determine color based on effect type
         let effect_color = effect_color(&card_def.effect);
 
+        // Get card type display
+        let (type_text, type_color) = card_type_display(card_def.card_type);
+
         commands.entity(entity).insert(CardEffectTextAdded);
 
         // Add effect text as a child entity (positioned on top of the card front face)
@@ -957,6 +1003,27 @@ fn add_effect_text_to_cards(
                 Mesh3d::default(),
                 MeshMaterial3d(text_material.clone()),
                 Transform::from_xyz(0.0, CARD_TEXT_LIFT, -1.0)
+                    .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+            ));
+
+            // Card type (top right corner)
+            parent.spawn((
+                Name::new("Card Type Text"),
+                Text3d::new(type_text),
+                Text3dStyling {
+                    size: 12.0,
+                    color: type_color,
+                    stroke: NonZeroU32::new(2),
+                    stroke_color: Srgba::BLACK,
+                    align: TextAlign::Center,
+                    anchor: TextAnchor::CENTER,
+                    world_scale: Some(Vec2::splat(0.2)),
+                    layer_offset: 0.001,
+                    ..default()
+                },
+                Mesh3d::default(),
+                MeshMaterial3d(text_material.clone()),
+                Transform::from_xyz(0.85, CARD_TEXT_LIFT, -1.25)
                     .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
             ));
 

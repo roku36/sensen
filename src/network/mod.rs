@@ -14,9 +14,12 @@ use bevy_ggrs::prelude::*;
 use bevy_matchbox::prelude::{MatchboxSocket, PeerId};
 
 use crate::game::{
-    Acceleration, Block, CardRegistry, Cost, Deck, DiscardPile, DrawCardsMessage, GameMode,
-    GameplaySystems, Hand, Health, PlayCardMessage, PlayerHandle, Thorns, apply_local_input_flags,
-    is_online,
+    Acceleration, BarricadeEffect, Block, BrutalityEffect, CardRegistry, CombustEffect,
+    CorruptionEffect, Cost, DarkEmbraceEffect, Deck, DemonFormEffect, DiscardPile,
+    DrawCardsMessage, EvolveEffect, FeelNoPainEffect, FireBreathingEffect, GameMode,
+    GameplaySystems, Hand, Health, JuggernautEffect, MetallicizeEffect, PlayCardMessage,
+    PlayerHandle, RageEffect, RuptureEffect, Strength, Thorns, Vulnerable, Weak,
+    apply_local_input_flags, is_online,
 };
 use crate::screens::Screen;
 
@@ -42,8 +45,24 @@ pub fn plugin(app: &mut App) {
     app.rollback_component_with_clone::<Health>();
     app.rollback_component_with_clone::<Block>();
     app.rollback_component_with_clone::<Thorns>();
+    app.rollback_component_with_clone::<Strength>();
+    app.rollback_component_with_clone::<Vulnerable>();
+    app.rollback_component_with_clone::<Weak>();
     app.rollback_component_with_clone::<Cost>();
     app.rollback_component_with_clone::<Acceleration>();
+    app.rollback_component_with_clone::<RageEffect>();
+    app.rollback_component_with_clone::<MetallicizeEffect>();
+    app.rollback_component_with_clone::<DemonFormEffect>();
+    app.rollback_component_with_clone::<BarricadeEffect>();
+    app.rollback_component_with_clone::<JuggernautEffect>();
+    app.rollback_component_with_clone::<CombustEffect>();
+    app.rollback_component_with_clone::<DarkEmbraceEffect>();
+    app.rollback_component_with_clone::<EvolveEffect>();
+    app.rollback_component_with_clone::<FeelNoPainEffect>();
+    app.rollback_component_with_clone::<FireBreathingEffect>();
+    app.rollback_component_with_clone::<RuptureEffect>();
+    app.rollback_component_with_clone::<CorruptionEffect>();
+    app.rollback_component_with_clone::<BrutalityEffect>();
     app.rollback_component_with_clone::<Hand>();
     app.rollback_component_with_clone::<Deck>();
     app.rollback_component_with_clone::<DiscardPile>();
@@ -90,13 +109,19 @@ pub fn plugin(app: &mut App) {
 fn process_ggrs_inputs(
     inputs: Res<PlayerInputs<SensenGgrsConfig>>,
     card_registry: Res<CardRegistry>,
-    mut player_query: Query<(Entity, &Hand, &mut Cost, &PlayerHandle)>,
+    mut player_query: Query<(
+        Entity,
+        &Hand,
+        &mut Cost,
+        &PlayerHandle,
+        Option<&CorruptionEffect>,
+    )>,
     mut draw_messages: MessageWriter<DrawCardsMessage>,
     mut play_messages: MessageWriter<PlayCardMessage>,
 ) {
     for (handle, (input, _status)) in inputs.iter().enumerate() {
         let flags = input.flags;
-        for (player_entity, hand, mut cost, player_handle) in &mut player_query {
+        for (player_entity, hand, mut cost, player_handle, corruption) in &mut player_query {
             if player_handle.0 != handle {
                 continue;
             }
@@ -106,6 +131,7 @@ fn process_ggrs_inputs(
                 player_entity,
                 hand,
                 &mut cost,
+                corruption.is_some(),
                 &card_registry,
                 &mut draw_messages,
                 &mut play_messages,

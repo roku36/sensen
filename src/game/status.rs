@@ -5,14 +5,17 @@ use bevy_ggrs::GgrsSchedule;
 
 use crate::{
     AppSystems,
-    game::{BLOCK_DECAY_RATE, GameplaySystems, is_offline, is_online},
+    game::{
+        BLOCK_DECAY_RATE, DamageKind, DamageMessage, DrawCardsMessage, GainBlockMessage,
+        GameplaySystems, PlayerHandle, is_offline, is_online, opponent_entity,
+    },
     screens::Screen,
 };
 
 pub fn plugin(app: &mut App) {
     app.add_systems(
         Update,
-        (tick_status_effects, tick_block_decay)
+        (tick_status_effects, tick_power_effects, tick_block_decay)
             .chain()
             .in_set(AppSystems::TickTimers)
             .run_if(is_offline)
@@ -20,7 +23,7 @@ pub fn plugin(app: &mut App) {
     );
     app.add_systems(
         GgrsSchedule,
-        (tick_status_effects, tick_block_decay)
+        (tick_status_effects, tick_power_effects, tick_block_decay)
             .chain()
             .in_set(GameplaySystems::Tick)
             .run_if(is_online)
@@ -183,6 +186,101 @@ impl CombustEffect {
     }
 }
 
+/// Dark Embrace - draw cards when exhausting.
+#[derive(Component, Debug, Default, Clone, Reflect)]
+#[reflect(Component)]
+pub struct DarkEmbraceEffect {
+    pub draw_on_exhaust: u32,
+}
+
+impl DarkEmbraceEffect {
+    pub fn new(draw_on_exhaust: u32) -> Self {
+        Self { draw_on_exhaust }
+    }
+}
+
+/// Evolve - draw when a status card is drawn.
+#[derive(Component, Debug, Default, Clone, Reflect)]
+#[reflect(Component)]
+pub struct EvolveEffect {
+    pub draw_on_status: u32,
+}
+
+impl EvolveEffect {
+    pub fn new(draw_on_status: u32) -> Self {
+        Self { draw_on_status }
+    }
+}
+
+/// Feel No Pain - gain block when exhausting.
+#[derive(Component, Debug, Default, Clone, Reflect)]
+#[reflect(Component)]
+pub struct FeelNoPainEffect {
+    pub block_on_exhaust: f32,
+}
+
+impl FeelNoPainEffect {
+    pub fn new(block_on_exhaust: f32) -> Self {
+        Self { block_on_exhaust }
+    }
+}
+
+/// Fire Breathing - deal damage when a status card is drawn.
+#[derive(Component, Debug, Default, Clone, Reflect)]
+#[reflect(Component)]
+pub struct FireBreathingEffect {
+    pub damage_on_status_draw: f32,
+}
+
+impl FireBreathingEffect {
+    pub fn new(damage_on_status_draw: f32) -> Self {
+        Self {
+            damage_on_status_draw,
+        }
+    }
+}
+
+/// Rupture - gain strength when taking self-damage.
+#[derive(Component, Debug, Default, Clone, Reflect)]
+#[reflect(Component)]
+pub struct RuptureEffect {
+    pub strength_on_self_damage: f32,
+}
+
+impl RuptureEffect {
+    pub fn new(strength_on_self_damage: f32) -> Self {
+        Self {
+            strength_on_self_damage,
+        }
+    }
+}
+
+/// Corruption - skills cost 0 and exhaust.
+#[derive(Component, Debug, Default, Clone, Reflect)]
+#[reflect(Component)]
+pub struct CorruptionEffect;
+
+/// Brutality - periodic self damage and draw.
+#[derive(Component, Debug, Default, Clone, Reflect)]
+#[reflect(Component)]
+pub struct BrutalityEffect {
+    pub self_damage: f32,
+    pub draw: u32,
+    pub interval: f32,
+    pub timer: f32,
+}
+
+impl BrutalityEffect {
+    pub fn new(self_damage: f32, draw: u32, interval: f32) -> Self {
+        Self {
+            self_damage,
+            draw,
+            interval,
+            timer: 0.0,
+        }
+    }
+}
+
 /// System to tick down status effect durations.
 fn tick_status_effects(
     time: Res<Time>,
@@ -218,6 +316,77 @@ fn tick_status_effects(
             let gain = demon.accumulated.floor();
             strength.gain(gain);
             demon.accumulated -= gain;
+        }
+    }
+}
+
+fn tick_power_effects(
+    time: Res<Time>,
+    players: Query<(Entity, &PlayerHandle)>,
+    metallicize_query: Query<(Entity, &MetallicizeEffect)>,
+    mut combust_query: Query<(Entity, &mut CombustEffect)>,
+    mut brutality_query: Query<(Entity, &mut BrutalityEffect)>,
+    mut block_messages: MessageWriter<GainBlockMessage>,
+    mut damage_messages: MessageWriter<DamageMessage>,
+    mut draw_messages: MessageWriter<DrawCardsMessage>,
+) {
+    let delta = time.delta_secs();
+
+    for (entity, metallicize) in &metallicize_query {
+        if metallicize.block_per_second > 0.0 {
+            block_messages.write(GainBlockMessage {
+                target: entity,
+                amount: metallicize.block_per_second * delta,
+            });
+        }
+    }
+
+    for (entity, mut combust) in &mut combust_query {
+        combust.timer += delta;
+        while combust.timer >= 1.0 {
+            combust.timer -= 1.0;
+            if combust.self_damage > 0.0 {
+                damage_messages.write(DamageMessage {
+                    target: entity,
+                    amount: combust.self_damage,
+                    source: Some(entity),
+                    kind: DamageKind::Power,
+                });
+            }
+            if combust.enemy_damage > 0.0 {
+                if let Some(opponent) = opponent_entity(entity, &players) {
+                    damage_messages.write(DamageMessage {
+                        target: opponent,
+                        amount: combust.enemy_damage,
+                        source: Some(entity),
+                        kind: DamageKind::Power,
+                    });
+                }
+            }
+        }
+    }
+
+    for (entity, mut brutality) in &mut brutality_query {
+        if brutality.interval <= 0.0 {
+            continue;
+        }
+        brutality.timer += delta;
+        while brutality.timer >= brutality.interval {
+            brutality.timer -= brutality.interval;
+            if brutality.self_damage > 0.0 {
+                damage_messages.write(DamageMessage {
+                    target: entity,
+                    amount: brutality.self_damage,
+                    source: Some(entity),
+                    kind: DamageKind::Power,
+                });
+            }
+            if brutality.draw > 0 {
+                draw_messages.write(DrawCardsMessage {
+                    player: entity,
+                    count: brutality.draw as usize,
+                });
+            }
         }
     }
 }

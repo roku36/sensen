@@ -1,13 +1,18 @@
 //! Card effect application system.
 
-use bevy::{ecs::message::Message, prelude::*};
+use bevy::{
+    ecs::{message::Message, system::SystemParam},
+    prelude::*,
+};
 use bevy_ggrs::GgrsSchedule;
 
 use super::{
-    Acceleration, BarricadeEffect, Block, CardEffect, CardPlayedMessage, CardRegistry,
-    CombustEffect, Cost, DamageKind, DamageMessage, DemonFormEffect, DrawCardsMessage,
-    GainBlockMessage, GainThornsMessage, HealMessage, JuggernautEffect, MetallicizeEffect,
-    PlayerHandle, RageEffect, Strength, Vulnerable, Weak,
+    Acceleration, BarricadeEffect, Block, BrutalityEffect, CardEffect, CardExhaustedMessage,
+    CardPlayedMessage, CardRegistry, CardType, CombustEffect, CorruptionEffect, Cost, DamageKind,
+    DamageMessage, DarkEmbraceEffect, DemonFormEffect, DrawCardsMessage, EvolveEffect,
+    FeelNoPainEffect, FireBreathingEffect, GainBlockMessage, GainThornsMessage, HealMessage,
+    JuggernautEffect, MetallicizeEffect, PlayerHandle, RageEffect, RuptureEffect, Strength,
+    Vulnerable, Weak, opponent_entity,
 };
 use crate::{
     AppSystems,
@@ -72,23 +77,34 @@ pub struct AddStatusCardMessage {
     pub card_id: super::CardId,
 }
 
+#[derive(SystemParam)]
+struct EffectMessages<'w> {
+    damage: MessageWriter<'w, DamageMessage>,
+    heal: MessageWriter<'w, HealMessage>,
+    draw: MessageWriter<'w, DrawCardsMessage>,
+    block: MessageWriter<'w, GainBlockMessage>,
+    thorns: MessageWriter<'w, GainThornsMessage>,
+    strength: MessageWriter<'w, ApplyStrengthMessage>,
+    vulnerable: MessageWriter<'w, ApplyVulnerableMessage>,
+    weak: MessageWriter<'w, ApplyWeakMessage>,
+    add_status: MessageWriter<'w, AddStatusCardMessage>,
+}
+
 /// System to apply card effects when a card is played.
 fn apply_card_effects(
     mut card_played_messages: MessageReader<CardPlayedMessage>,
+    mut exhausted_messages: MessageReader<CardExhaustedMessage>,
     card_registry: Res<CardRegistry>,
     players: Query<(Entity, &PlayerHandle)>,
-    mut damage_messages: MessageWriter<DamageMessage>,
-    mut heal_messages: MessageWriter<HealMessage>,
-    mut draw_messages: MessageWriter<DrawCardsMessage>,
-    mut block_messages: MessageWriter<GainBlockMessage>,
-    mut thorns_messages: MessageWriter<GainThornsMessage>,
-    mut strength_messages: MessageWriter<ApplyStrengthMessage>,
-    mut vulnerable_messages: MessageWriter<ApplyVulnerableMessage>,
-    mut weak_messages: MessageWriter<ApplyWeakMessage>,
-    mut add_status_messages: MessageWriter<AddStatusCardMessage>,
+    mut messages: EffectMessages,
     mut cost_query: Query<(&mut Cost, Option<&mut Acceleration>)>,
     block_query: Query<&Block>,
     strength_query: Query<&Strength>,
+    rage_query: Query<&RageEffect>,
+    dark_embrace_query: Query<&DarkEmbraceEffect>,
+    feel_no_pain_query: Query<&FeelNoPainEffect>,
+    weak_query: Query<&Weak>,
+    vulnerable_query: Query<&Vulnerable>,
     mut commands: Commands,
 ) {
     for event in card_played_messages.read() {
@@ -96,16 +112,10 @@ fn apply_card_effects(
             continue;
         };
 
-        let Ok((_, player_handle)) = players.get(event.player) else {
+        if players.get(event.player).is_err() {
             continue;
-        };
-        let opponent = players.iter().find_map(|(entity, handle)| {
-            if handle.0 != player_handle.0 {
-                Some(entity)
-            } else {
-                None
-            }
-        });
+        }
+        let opponent = opponent_entity(event.player, &players);
 
         // Get player's strength for damage calculations
         let player_strength = strength_query
@@ -118,19 +128,51 @@ fn apply_card_effects(
             event.player,
             opponent,
             player_strength,
-            &mut damage_messages,
-            &mut heal_messages,
-            &mut draw_messages,
-            &mut block_messages,
-            &mut thorns_messages,
-            &mut strength_messages,
-            &mut vulnerable_messages,
-            &mut weak_messages,
-            &mut add_status_messages,
+            &mut messages.damage,
+            &mut messages.heal,
+            &mut messages.draw,
+            &mut messages.block,
+            &mut messages.thorns,
+            &mut messages.strength,
+            &mut messages.vulnerable,
+            &mut messages.weak,
+            &mut messages.add_status,
             &mut cost_query,
             &block_query,
+            &weak_query,
+            &vulnerable_query,
             &mut commands,
         );
+
+        if card_def.card_type == CardType::Attack {
+            if let Ok(rage) = rage_query.get(event.player) {
+                if rage.is_active() {
+                    messages.block.write(GainBlockMessage {
+                        target: event.player,
+                        amount: rage.block_per_attack,
+                    });
+                }
+            }
+        }
+    }
+
+    for event in exhausted_messages.read() {
+        if let Ok(effect) = dark_embrace_query.get(event.player) {
+            if effect.draw_on_exhaust > 0 {
+                messages.draw.write(DrawCardsMessage {
+                    player: event.player,
+                    count: effect.draw_on_exhaust as usize,
+                });
+            }
+        }
+        if let Ok(effect) = feel_no_pain_query.get(event.player) {
+            if effect.block_on_exhaust > 0.0 {
+                messages.block.write(GainBlockMessage {
+                    target: event.player,
+                    amount: effect.block_on_exhaust,
+                });
+            }
+        }
     }
 }
 
@@ -151,30 +193,45 @@ fn apply_card_effect(
     add_status_messages: &mut MessageWriter<AddStatusCardMessage>,
     cost_query: &mut Query<(&mut Cost, Option<&mut Acceleration>)>,
     block_query: &Query<&Block>,
+    weak_query: &Query<&Weak>,
+    vulnerable_query: &Query<&Vulnerable>,
     commands: &mut Commands,
 ) {
     match effect {
         CardEffect::Damage(amount) => {
             if let Some(opponent) = opponent {
-                // Apply strength bonus (10 damage per strength)
-                let total_damage = amount + player_strength * 10.0;
+                let total_damage = attack_damage(
+                    *amount,
+                    player,
+                    Some(opponent),
+                    player_strength,
+                    weak_query,
+                    vulnerable_query,
+                );
                 damage_messages.write(DamageMessage {
                     target: opponent,
                     amount: total_damage,
                     source: Some(player),
-                    kind: DamageKind::Direct,
+                    kind: DamageKind::Attack,
                 });
             }
         }
         CardEffect::MultiHit { damage, hits } => {
             if let Some(opponent) = opponent {
-                let total_damage = damage + player_strength * 10.0;
+                let total_damage = attack_damage(
+                    *damage,
+                    player,
+                    Some(opponent),
+                    player_strength,
+                    weak_query,
+                    vulnerable_query,
+                );
                 for _ in 0..*hits {
                     damage_messages.write(DamageMessage {
                         target: opponent,
                         amount: total_damage,
                         source: Some(player),
-                        kind: DamageKind::Direct,
+                        kind: DamageKind::Attack,
                     });
                 }
             }
@@ -217,6 +274,12 @@ fn apply_card_effect(
                 });
             }
         }
+        CardEffect::SelfVulnerable(duration) => {
+            vulnerable_messages.write(ApplyVulnerableMessage {
+                target: player,
+                duration: *duration,
+            });
+        }
         CardEffect::Weak(duration) => {
             if let Some(opponent) = opponent {
                 weak_messages.write(ApplyWeakMessage {
@@ -244,11 +307,19 @@ fn apply_card_effect(
             // Deal damage equal to current block
             if let Some(opponent) = opponent {
                 if let Ok(block) = block_query.get(player) {
+                    let total_damage = attack_damage(
+                        block.current,
+                        player,
+                        Some(opponent),
+                        player_strength,
+                        weak_query,
+                        vulnerable_query,
+                    );
                     damage_messages.write(DamageMessage {
                         target: opponent,
-                        amount: block.current,
+                        amount: total_damage,
                         source: Some(player),
-                        kind: DamageKind::Direct,
+                        kind: DamageKind::Attack,
                     });
                 }
             }
@@ -260,7 +331,7 @@ fn apply_card_effect(
                     target: player,
                     amount: -amount,
                     source: Some(player),
-                    kind: DamageKind::Direct,
+                    kind: DamageKind::Power,
                 });
             } else {
                 heal_messages.write(HealMessage {
@@ -314,6 +385,41 @@ fn apply_card_effect(
                 .entity(player)
                 .insert(JuggernautEffect::new(*damage_on_block));
         }
+        CardEffect::DarkEmbrace { draw } => {
+            commands
+                .entity(player)
+                .insert(DarkEmbraceEffect::new(*draw));
+        }
+        CardEffect::Evolve { draw } => {
+            commands.entity(player).insert(EvolveEffect::new(*draw));
+        }
+        CardEffect::FeelNoPain { block } => {
+            commands
+                .entity(player)
+                .insert(FeelNoPainEffect::new(*block));
+        }
+        CardEffect::FireBreathing { damage } => {
+            commands
+                .entity(player)
+                .insert(FireBreathingEffect::new(*damage));
+        }
+        CardEffect::Rupture { strength } => {
+            commands
+                .entity(player)
+                .insert(RuptureEffect::new(*strength));
+        }
+        CardEffect::Corruption => {
+            commands.entity(player).insert(CorruptionEffect);
+        }
+        CardEffect::Brutality {
+            self_damage,
+            draw,
+            interval,
+        } => {
+            commands
+                .entity(player)
+                .insert(BrutalityEffect::new(*self_damage, *draw, *interval));
+        }
         CardEffect::Exhaust => {
             // Card is exhausted (removed from combat) - handled by deck system
         }
@@ -341,11 +447,33 @@ fn apply_card_effect(
                     add_status_messages,
                     cost_query,
                     block_query,
+                    weak_query,
+                    vulnerable_query,
                     commands,
                 );
             }
         }
     }
+}
+
+fn attack_damage(
+    base: f32,
+    player: Entity,
+    opponent: Option<Entity>,
+    player_strength: f32,
+    weak_query: &Query<&Weak>,
+    vulnerable_query: &Query<&Vulnerable>,
+) -> f32 {
+    let mut damage = base + player_strength * 10.0;
+    if let Ok(weak) = weak_query.get(player) {
+        damage = weak.modify_outgoing_damage(damage);
+    }
+    if let Some(opponent) = opponent {
+        if let Ok(vulnerable) = vulnerable_query.get(opponent) {
+            damage = vulnerable.modify_incoming_damage(damage);
+        }
+    }
+    damage.max(0.0)
 }
 
 /// System to apply status effect messages (strength, vulnerable, weak).

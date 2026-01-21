@@ -9,7 +9,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 1: Strike - Basic attack
     registry.register(CardDef {
-        id: CardId(1),
+        id: CardId::Strike,
         name: "Strike".to_string(),
         description: "Deal 60 damage.".to_string(),
         card_type: CardType::Attack,
@@ -20,7 +20,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 2: Bash - Attack with weak
     registry.register(CardDef {
-        id: CardId(2),
+        id: CardId::Bash,
         name: "Bash".to_string(),
         description: "Deal 80 damage. Apply 2 Vulnerable.".to_string(),
         card_type: CardType::Attack,
@@ -33,7 +33,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 3: Anger - Low cost, adds copy to discard
     registry.register(CardDef {
-        id: CardId(3),
+        id: CardId::Anger,
         name: "Anger".to_string(),
         description: "Deal 60 damage. Add a copy to discard pile.".to_string(),
         card_type: CardType::Attack,
@@ -44,7 +44,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 4: Cleave - Multi-target (in 1v1, just more damage)
     registry.register(CardDef {
-        id: CardId(4),
+        id: CardId::Cleave,
         name: "Cleave".to_string(),
         description: "Deal 80 damage.".to_string(),
         card_type: CardType::Attack,
@@ -55,7 +55,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 5: Clothesline - Damage + Weak
     registry.register(CardDef {
-        id: CardId(5),
+        id: CardId::Clothesline,
         name: "Clothesline".to_string(),
         description: "Deal 120 damage. Apply 2 Weak.".to_string(),
         card_type: CardType::Attack,
@@ -66,7 +66,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 6: Headbutt - Damage
     registry.register(CardDef {
-        id: CardId(6),
+        id: CardId::Headbutt,
         name: "Headbutt".to_string(),
         description: "Deal 90 damage.".to_string(),
         card_type: CardType::Attack,
@@ -77,7 +77,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 7: Iron Wave - Damage + Block
     registry.register(CardDef {
-        id: CardId(7),
+        id: CardId::IronWave,
         name: "Iron Wave".to_string(),
         description: "Deal 50 damage. Gain 50 Block.".to_string(),
         card_type: CardType::Attack,
@@ -88,7 +88,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 8: Pommel Strike - Damage + Draw
     registry.register(CardDef {
-        id: CardId(8),
+        id: CardId::PommelStrike,
         name: "Pommel Strike".to_string(),
         description: "Deal 90 damage. Draw 1 card.".to_string(),
         card_type: CardType::Attack,
@@ -99,7 +99,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 9: Sword Boomerang - Multi-hit random
     registry.register(CardDef {
-        id: CardId(9),
+        id: CardId::SwordBoomerang,
         name: "Sword Boomerang".to_string(),
         description: "Deal 30 damage 3 times.".to_string(),
         card_type: CardType::Attack,
@@ -113,7 +113,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 10: Thunder Clap - Damage + Vulnerable
     registry.register(CardDef {
-        id: CardId(10),
+        id: CardId::ThunderClap,
         name: "Thunder Clap".to_string(),
         description: "Deal 40 damage. Apply 1 Vulnerable.".to_string(),
         card_type: CardType::Attack,
@@ -124,7 +124,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 11: Twin Strike - Two hits
     registry.register(CardDef {
-        id: CardId(11),
+        id: CardId::TwinStrike,
         name: "Twin Strike".to_string(),
         description: "Deal 50 damage twice.".to_string(),
         card_type: CardType::Attack,
@@ -138,7 +138,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 12: Wild Strike - High damage, add wound
     registry.register(CardDef {
-        id: CardId(12),
+        id: CardId::WildStrike,
         name: "Wild Strike".to_string(),
         description: "Deal 120 damage. Add a Wound to your deck.".to_string(),
         card_type: CardType::Attack,
@@ -146,7 +146,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
         cost: 1.0,
         effect: CardEffect::Combo(vec![
             CardEffect::Damage(120.0),
-            CardEffect::AddStatus(CardId(301)), // Wound
+            CardEffect::AddStatus(CardId::Wound), // Wound
         ]),
     });
 
@@ -154,7 +154,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 13: Body Slam - Damage equal to block
     registry.register(CardDef {
-        id: CardId(13),
+        id: CardId::BodySlam,
         name: "Body Slam".to_string(),
         description: "Deal damage equal to your current Block.".to_string(),
         card_type: CardType::Attack,
@@ -165,7 +165,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 14: Carnage - High damage
     registry.register(CardDef {
-        id: CardId(14),
+        id: CardId::Carnage,
         name: "Carnage".to_string(),
         description: "Deal 200 damage.".to_string(),
         card_type: CardType::Attack,
@@ -176,7 +176,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 15: Dropkick - Draw + cost if vulnerable
     registry.register(CardDef {
-        id: CardId(15),
+        id: CardId::Dropkick,
         name: "Dropkick".to_string(),
         description: "Deal 50 damage. Draw 1. Gain 1 cost.".to_string(),
         card_type: CardType::Attack,
@@ -194,7 +194,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 16: Hemokinesis - Damage, self damage
     registry.register(CardDef {
-        id: CardId(16),
+        id: CardId::Hemokinesis,
         name: "Hemokinesis".to_string(),
         description: "Lose 20 HP. Deal 150 damage.".to_string(),
         card_type: CardType::Attack,
@@ -208,7 +208,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 17: Pummel - Many small hits
     registry.register(CardDef {
-        id: CardId(17),
+        id: CardId::Pummel,
         name: "Pummel".to_string(),
         description: "Deal 20 damage 4 times.".to_string(),
         card_type: CardType::Attack,
@@ -222,7 +222,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 18: Rampage - Increasing damage (simplified: high base)
     registry.register(CardDef {
-        id: CardId(18),
+        id: CardId::Rampage,
         name: "Rampage".to_string(),
         description: "Deal 80 damage. Damage increases each play.".to_string(),
         card_type: CardType::Attack,
@@ -233,7 +233,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 19: Reckless Charge - High damage, add wound
     registry.register(CardDef {
-        id: CardId(19),
+        id: CardId::RecklessCharge,
         name: "Reckless Charge".to_string(),
         description: "Deal 70 damage. Add a Wound to your draw pile.".to_string(),
         card_type: CardType::Attack,
@@ -241,13 +241,13 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
         cost: 0.5,
         effect: CardEffect::Combo(vec![
             CardEffect::Damage(70.0),
-            CardEffect::AddStatus(CardId(301)), // Wound
+            CardEffect::AddStatus(CardId::Wound), // Wound
         ]),
     });
 
     // 20: Searing Blow - Upgraded attack
     registry.register(CardDef {
-        id: CardId(20),
+        id: CardId::SearingBlow,
         name: "Searing Blow".to_string(),
         description: "Deal 120 damage. Can be upgraded infinitely.".to_string(),
         card_type: CardType::Attack,
@@ -258,7 +258,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 21: Uppercut - Damage + Weak + Vulnerable
     registry.register(CardDef {
-        id: CardId(21),
+        id: CardId::Uppercut,
         name: "Uppercut".to_string(),
         description: "Deal 130 damage. Apply 1 Weak. Apply 1 Vulnerable.".to_string(),
         card_type: CardType::Attack,
@@ -273,7 +273,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 22: Whirlwind - Damage based on cost
     registry.register(CardDef {
-        id: CardId(22),
+        id: CardId::Whirlwind,
         name: "Whirlwind".to_string(),
         description: "Deal 50 damage 3 times.".to_string(),
         card_type: CardType::Attack,
@@ -289,7 +289,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 23: Bludgeon - Massive damage
     registry.register(CardDef {
-        id: CardId(23),
+        id: CardId::Bludgeon,
         name: "Bludgeon".to_string(),
         description: "Deal 320 damage.".to_string(),
         card_type: CardType::Attack,
@@ -300,7 +300,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 24: Feed - Heal on kill (simplified: damage + heal)
     registry.register(CardDef {
-        id: CardId(24),
+        id: CardId::Feed,
         name: "Feed".to_string(),
         description: "Deal 100 damage. Heal 30 HP.".to_string(),
         card_type: CardType::Attack,
@@ -311,7 +311,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 25: Fiend Fire - Exhaust all (simplified: big damage)
     registry.register(CardDef {
-        id: CardId(25),
+        id: CardId::FiendFire,
         name: "Fiend Fire".to_string(),
         description: "Deal 70 damage for each card in hand.".to_string(),
         card_type: CardType::Attack,
@@ -322,7 +322,7 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
 
     // 26: Immolate - High damage, add burn
     registry.register(CardDef {
-        id: CardId(26),
+        id: CardId::Immolate,
         name: "Immolate".to_string(),
         description: "Deal 210 damage. Add a Burn to discard pile.".to_string(),
         card_type: CardType::Attack,
@@ -330,13 +330,13 @@ pub fn register_attack_cards(registry: &mut CardRegistry) {
         cost: 2.0,
         effect: CardEffect::Combo(vec![
             CardEffect::Damage(210.0),
-            CardEffect::AddStatus(CardId(302)), // Burn
+            CardEffect::AddStatus(CardId::Burn), // Burn
         ]),
     });
 
     // 27: Reaper - Life steal
     registry.register(CardDef {
-        id: CardId(27),
+        id: CardId::Reaper,
         name: "Reaper".to_string(),
         description: "Deal 40 damage. Heal for unblocked damage.".to_string(),
         card_type: CardType::Attack,

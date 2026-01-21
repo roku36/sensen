@@ -9,7 +9,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 100: Defend - Basic block
     registry.register(CardDef {
-        id: CardId(100),
+        id: CardId::Defend,
         name: "Defend".to_string(),
         description: "Gain 50 Block.".to_string(),
         card_type: CardType::Skill,
@@ -22,7 +22,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 101: Armaments - Block + upgrade (simplified)
     registry.register(CardDef {
-        id: CardId(101),
+        id: CardId::Armaments,
         name: "Armaments".to_string(),
         description: "Gain 50 Block.".to_string(),
         card_type: CardType::Skill,
@@ -33,7 +33,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 102: Flex - Temporary strength
     registry.register(CardDef {
-        id: CardId(102),
+        id: CardId::Flex,
         name: "Flex".to_string(),
         description: "Gain 2 Strength for 5 seconds.".to_string(),
         card_type: CardType::Skill,
@@ -44,7 +44,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 103: Havoc - Play top card from deck
     registry.register(CardDef {
-        id: CardId(103),
+        id: CardId::Havoc,
         name: "Havoc".to_string(),
         description: "Draw and play the top card of your deck.".to_string(),
         card_type: CardType::Skill,
@@ -55,7 +55,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 104: Shrug It Off - Block + Draw
     registry.register(CardDef {
-        id: CardId(104),
+        id: CardId::ShrugItOff,
         name: "Shrug It Off".to_string(),
         description: "Gain 80 Block. Draw 1 card.".to_string(),
         card_type: CardType::Skill,
@@ -66,7 +66,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 105: True Grit - Block, exhaust random
     registry.register(CardDef {
-        id: CardId(105),
+        id: CardId::TrueGrit,
         name: "True Grit".to_string(),
         description: "Gain 70 Block.".to_string(),
         card_type: CardType::Skill,
@@ -77,7 +77,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 106: Warcry - Draw + put card on deck
     registry.register(CardDef {
-        id: CardId(106),
+        id: CardId::Warcry,
         name: "Warcry".to_string(),
         description: "Draw 2 cards.".to_string(),
         card_type: CardType::Skill,
@@ -90,7 +90,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 107: Battle Trance - Draw many
     registry.register(CardDef {
-        id: CardId(107),
+        id: CardId::BattleTrance,
         name: "Battle Trance".to_string(),
         description: "Draw 3 cards.".to_string(),
         card_type: CardType::Skill,
@@ -101,7 +101,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 108: Bloodletting - Self damage for cost boost
     registry.register(CardDef {
-        id: CardId(108),
+        id: CardId::Bloodletting,
         name: "Bloodletting".to_string(),
         description: "Lose 30 HP. Gain cost acceleration.".to_string(),
         card_type: CardType::Skill,
@@ -118,7 +118,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 109: Burning Pact - Draw, exhaust
     registry.register(CardDef {
-        id: CardId(109),
+        id: CardId::BurningPact,
         name: "Burning Pact".to_string(),
         description: "Draw 2 cards.".to_string(),
         card_type: CardType::Skill,
@@ -129,7 +129,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 110: Disarm - Remove enemy strength (simplified: apply weak)
     registry.register(CardDef {
-        id: CardId(110),
+        id: CardId::Disarm,
         name: "Disarm".to_string(),
         description: "Apply 2 Weak.".to_string(),
         card_type: CardType::Skill,
@@ -140,7 +140,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 111: Entrench - Double block
     registry.register(CardDef {
-        id: CardId(111),
+        id: CardId::Entrench,
         name: "Entrench".to_string(),
         description: "Double your current Block.".to_string(),
         card_type: CardType::Skill,
@@ -151,7 +151,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 112: Flame Barrier - Block + thorns
     registry.register(CardDef {
-        id: CardId(112),
+        id: CardId::FlameBarrier,
         name: "Flame Barrier".to_string(),
         description: "Gain 120 Block. Gain 4 Thorns.".to_string(),
         card_type: CardType::Skill,
@@ -162,7 +162,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 113: Ghostly Armor - Big block
     registry.register(CardDef {
-        id: CardId(113),
+        id: CardId::GhostlyArmor,
         name: "Ghostly Armor".to_string(),
         description: "Gain 100 Block.".to_string(),
         card_type: CardType::Skill,
@@ -173,7 +173,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 114: Infernal Blade - Random attack to hand
     registry.register(CardDef {
-        id: CardId(114),
+        id: CardId::InfernalBlade,
         name: "Infernal Blade".to_string(),
         description: "Draw 2 cards.".to_string(),
         card_type: CardType::Skill,
@@ -184,7 +184,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 115: Intimidate - Apply weak to all
     registry.register(CardDef {
-        id: CardId(115),
+        id: CardId::Intimidate,
         name: "Intimidate".to_string(),
         description: "Apply 1 Weak.".to_string(),
         card_type: CardType::Skill,
@@ -195,7 +195,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 116: Power Through - Big block, add wounds
     registry.register(CardDef {
-        id: CardId(116),
+        id: CardId::PowerThrough,
         name: "Power Through".to_string(),
         description: "Gain 150 Block. Add 2 Wounds to your hand.".to_string(),
         card_type: CardType::Skill,
@@ -203,14 +203,14 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
         cost: 1.0,
         effect: CardEffect::Combo(vec![
             CardEffect::Block(150.0),
-            CardEffect::AddStatus(CardId(301)),
-            CardEffect::AddStatus(CardId(301)),
+            CardEffect::AddStatus(CardId::Wound),
+            CardEffect::AddStatus(CardId::Wound),
         ]),
     });
 
     // 117: Rage - Block when playing attacks
     registry.register(CardDef {
-        id: CardId(117),
+        id: CardId::Rage,
         name: "Rage".to_string(),
         description: "This turn, gain 3 Block when playing Attacks.".to_string(),
         card_type: CardType::Skill,
@@ -221,7 +221,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 118: Second Wind - Block for non-attacks
     registry.register(CardDef {
-        id: CardId(118),
+        id: CardId::SecondWind,
         name: "Second Wind".to_string(),
         description: "Gain 50 Block for each card in hand.".to_string(),
         card_type: CardType::Skill,
@@ -232,7 +232,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 119: Seeing Red - Free cost boost
     registry.register(CardDef {
-        id: CardId(119),
+        id: CardId::SeeingRed,
         name: "Seeing Red".to_string(),
         description: "Gain cost acceleration.".to_string(),
         card_type: CardType::Skill,
@@ -246,7 +246,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 120: Sentinel - Block, gain energy on exhaust
     registry.register(CardDef {
-        id: CardId(120),
+        id: CardId::Sentinel,
         name: "Sentinel".to_string(),
         description: "Gain 50 Block.".to_string(),
         card_type: CardType::Skill,
@@ -257,7 +257,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 121: Shockwave - Apply weak and vulnerable
     registry.register(CardDef {
-        id: CardId(121),
+        id: CardId::Shockwave,
         name: "Shockwave".to_string(),
         description: "Apply 3 Weak. Apply 3 Vulnerable.".to_string(),
         card_type: CardType::Skill,
@@ -268,7 +268,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 122: Spot Weakness - Gain strength if enemy attacking
     registry.register(CardDef {
-        id: CardId(122),
+        id: CardId::SpotWeakness,
         name: "Spot Weakness".to_string(),
         description: "Gain 3 Strength.".to_string(),
         card_type: CardType::Skill,
@@ -281,7 +281,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 123: Double Tap - Play attack twice
     registry.register(CardDef {
-        id: CardId(123),
+        id: CardId::DoubleTap,
         name: "Double Tap".to_string(),
         description: "Your next Attack is played twice.".to_string(),
         card_type: CardType::Skill,
@@ -292,7 +292,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 124: Exhume - Get exhausted card
     registry.register(CardDef {
-        id: CardId(124),
+        id: CardId::Exhume,
         name: "Exhume".to_string(),
         description: "Draw 2 cards.".to_string(),
         card_type: CardType::Skill,
@@ -303,7 +303,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 125: Impervious - Massive block
     registry.register(CardDef {
-        id: CardId(125),
+        id: CardId::Impervious,
         name: "Impervious".to_string(),
         description: "Gain 300 Block.".to_string(),
         card_type: CardType::Skill,
@@ -314,7 +314,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 126: Limit Break - Double strength
     registry.register(CardDef {
-        id: CardId(126),
+        id: CardId::LimitBreak,
         name: "Limit Break".to_string(),
         description: "Double your Strength.".to_string(),
         card_type: CardType::Skill,
@@ -325,7 +325,7 @@ pub fn register_skill_cards(registry: &mut CardRegistry) {
 
     // 127: Offering - Self damage for draw + cost
     registry.register(CardDef {
-        id: CardId(127),
+        id: CardId::Offering,
         name: "Offering".to_string(),
         description: "Lose 60 HP. Gain cost acceleration. Draw 3 cards.".to_string(),
         card_type: CardType::Skill,

@@ -53,7 +53,84 @@ pub enum CardRarity {
 
 /// Unique identifier for a card type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
-pub struct CardId(pub u32);
+#[repr(u32)]
+pub enum CardId {
+    Unknown = 0,
+    Strike = 1,
+    Bash = 2,
+    Anger = 3,
+    Cleave = 4,
+    Clothesline = 5,
+    Headbutt = 6,
+    IronWave = 7,
+    PommelStrike = 8,
+    SwordBoomerang = 9,
+    ThunderClap = 10,
+    TwinStrike = 11,
+    WildStrike = 12,
+    BodySlam = 13,
+    Carnage = 14,
+    Dropkick = 15,
+    Hemokinesis = 16,
+    Pummel = 17,
+    Rampage = 18,
+    RecklessCharge = 19,
+    SearingBlow = 20,
+    Uppercut = 21,
+    Whirlwind = 22,
+    Bludgeon = 23,
+    Feed = 24,
+    FiendFire = 25,
+    Immolate = 26,
+    Reaper = 27,
+    Defend = 100,
+    Armaments = 101,
+    Flex = 102,
+    Havoc = 103,
+    ShrugItOff = 104,
+    TrueGrit = 105,
+    Warcry = 106,
+    BattleTrance = 107,
+    Bloodletting = 108,
+    BurningPact = 109,
+    Disarm = 110,
+    Entrench = 111,
+    FlameBarrier = 112,
+    GhostlyArmor = 113,
+    InfernalBlade = 114,
+    Intimidate = 115,
+    PowerThrough = 116,
+    Rage = 117,
+    SecondWind = 118,
+    SeeingRed = 119,
+    Sentinel = 120,
+    Shockwave = 121,
+    SpotWeakness = 122,
+    DoubleTap = 123,
+    Exhume = 124,
+    Impervious = 125,
+    LimitBreak = 126,
+    Offering = 127,
+    Combust = 200,
+    DarkEmbrace = 201,
+    Evolve = 202,
+    FeelNoPain = 203,
+    FireBreathing = 204,
+    Inflame = 205,
+    Metallicize = 206,
+    Rupture = 207,
+    Barricade = 208,
+    Berserk = 209,
+    Brutality = 210,
+    Corruption = 211,
+    DemonForm = 212,
+    Juggernaut = 213,
+    Dazed = 300,
+    Wound = 301,
+    Burn = 302,
+    Slimed = 303,
+    Void = 304,
+}
 
 /// Definition of a card type (shared data).
 #[derive(Debug, Clone)]
@@ -86,13 +163,15 @@ pub enum CardEffect {
     Strength(f32),
     /// Apply vulnerable to opponent (takes more damage)
     Vulnerable(f32),
+    /// Apply vulnerable to self (takes more damage)
+    SelfVulnerable(f32),
     /// Apply weak to opponent (deals less damage)
     Weak(f32),
     /// Temporarily increase cost generation rate
     Accelerate { bonus_rate: f32, duration: f32 },
     /// Deal damage equal to current block
     BodySlam,
-    /// Gain block equal to damage dealt this turn
+    /// Lose HP (negative) or gain HP (positive) via card effect
     Bloodletting(f32),
     /// Double current block
     DoubleBlock,
@@ -100,7 +179,7 @@ pub enum CardEffect {
     DoubleStrength,
     /// Gain Rage (gain block when playing attacks)
     Rage(f32),
-    /// Gain Metallicize (gain block at end of turn... or continuously in realtime)
+    /// Gain Metallicize (gain block continuously)
     Metallicize(f32),
     /// Gain Combust (deal damage to self and enemies periodically)
     Combust { self_damage: f32, enemy_damage: f32 },
@@ -110,6 +189,24 @@ pub enum CardEffect {
     Barricade,
     /// Gain Juggernaut (deal damage when gaining block)
     Juggernaut(f32),
+    /// Draw when a card is exhausted
+    DarkEmbrace { draw: u32 },
+    /// Draw when a status card is drawn
+    Evolve { draw: u32 },
+    /// Gain block when a card is exhausted
+    FeelNoPain { block: f32 },
+    /// Deal damage when a status card is drawn
+    FireBreathing { damage: f32 },
+    /// Gain strength when taking self-damage
+    Rupture { strength: f32 },
+    /// Skills cost 0 and exhaust when played
+    Corruption,
+    /// Lose HP and draw on a periodic timer
+    Brutality {
+        self_damage: f32,
+        draw: u32,
+        interval: f32,
+    },
     /// Exhaust this card (removed from deck for this combat)
     Exhaust,
     /// Add a wound/status card to discard pile
@@ -131,6 +228,22 @@ impl CardRegistry {
 
     pub fn get(&self, id: CardId) -> Option<&CardDef> {
         self.cards.iter().find(|c| c.id == id)
+    }
+
+    /// Get a card by name (case-insensitive).
+    pub fn get_by_name(&self, name: &str) -> Option<&CardDef> {
+        let name_lower = name.to_lowercase();
+        self.cards
+            .iter()
+            .find(|c| c.name.to_lowercase() == name_lower)
+    }
+
+    /// Get a CardId by name (case-insensitive). Panics if not found.
+    /// Use this for deck building with readable names.
+    pub fn id(&self, name: &str) -> CardId {
+        self.get_by_name(name)
+            .unwrap_or_else(|| panic!("Card not found: {}", name))
+            .id
     }
 
     pub fn all(&self) -> &[CardDef] {
