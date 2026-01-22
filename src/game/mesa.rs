@@ -46,6 +46,7 @@ const CARD_TEXT_LIFT: f32 = 0.002;
 
 #[derive(Clone, Debug)]
 struct MesaCard {
+    #[allow(dead_code)]
     card_id: CardId,
     front: String,
     back: String,
@@ -90,6 +91,7 @@ impl MesaScene {
         }
     }
 
+    #[allow(dead_code)]
     fn play_marker_for(&self, player: usize) -> Option<usize> {
         match player {
             LOCAL_PLAYER_INDEX => self.local_play_marker,

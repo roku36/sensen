@@ -16,7 +16,7 @@ use bevy_matchbox::prelude::{MatchboxSocket, PeerId};
 use crate::game::{
     Acceleration, BarricadeEffect, Block, BrutalityEffect, CardRegistry, CombustEffect,
     CorruptionEffect, Cost, DarkEmbraceEffect, Deck, DemonFormEffect, DiscardPile,
-    DrawCardsMessage, EvolveEffect, FeelNoPainEffect, FireBreathingEffect, GameMode,
+    DrawCardsMessage, EvolveEffect, FeelNoPainEffect, FireBreathingEffect, GameMode, GameResult,
     GameplaySystems, Hand, Health, JuggernautEffect, MetallicizeEffect, PlayCardMessage,
     PlayerHandle, RageEffect, RuptureEffect, Strength, Thorns, Vulnerable, Weak,
     apply_local_input_flags, is_online,
@@ -80,7 +80,8 @@ pub fn plugin(app: &mut App) {
         process_ggrs_inputs
             .in_set(GameplaySystems::Input)
             .run_if(is_online)
-            .run_if(in_state(Screen::Gameplay)),
+            .run_if(in_state(Screen::Gameplay))
+            .run_if(in_state(GameResult::Playing)),
     );
 
     // Lobby systems
@@ -111,10 +112,6 @@ pub fn match_seed_from_peers(peer_ids: &[PeerId]) -> u64 {
         }
     }
     hash
-}
-
-pub fn seed_from_peer_id(peer_id: PeerId) -> u64 {
-    match_seed_from_peers(std::slice::from_ref(&peer_id))
 }
 
 /// Process GGRS-synchronized inputs and update game state.

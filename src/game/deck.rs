@@ -10,7 +10,7 @@ use crate::game::{
 };
 use crate::{
     AppSystems,
-    game::{GameplaySystems, is_offline, is_online},
+    game::{GameResult, GameplaySystems, is_offline, is_online},
     screens::Screen,
 };
 
@@ -32,7 +32,8 @@ pub fn plugin(app: &mut App) {
             .in_set(AppSystems::Update)
             .in_set(GameplaySystems::Deck)
             .run_if(is_offline)
-            .run_if(in_state(Screen::Gameplay)),
+            .run_if(in_state(Screen::Gameplay))
+            .run_if(in_state(GameResult::Playing)),
     );
     app.add_systems(
         GgrsSchedule,
@@ -40,7 +41,8 @@ pub fn plugin(app: &mut App) {
             .chain()
             .in_set(GameplaySystems::Deck)
             .run_if(is_online)
-            .run_if(in_state(Screen::Gameplay)),
+            .run_if(in_state(Screen::Gameplay))
+            .run_if(in_state(GameResult::Playing)),
     );
 }
 
@@ -69,6 +71,7 @@ pub struct CardPlayedMessage {
 #[derive(Message)]
 pub struct CardExhaustedMessage {
     pub player: Entity,
+    #[allow(dead_code)]
     pub card_id: super::CardId,
 }
 
@@ -99,6 +102,7 @@ impl Default for Deck {
 }
 
 impl Deck {
+    #[allow(dead_code)]
     pub fn new(cards: Vec<CardId>) -> Self {
         Self {
             cards,
@@ -106,6 +110,7 @@ impl Deck {
         }
     }
 
+    #[allow(dead_code)]
     pub fn new_with_seed(cards: Vec<CardId>, seed: u64) -> Self {
         Self {
             cards,
@@ -147,6 +152,7 @@ impl Deck {
         self.cards.is_empty()
     }
 
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.cards.len()
     }
@@ -184,6 +190,7 @@ impl Hand {
         self.cards.len()
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.cards.is_empty()
     }
@@ -206,6 +213,7 @@ impl DiscardPile {
         std::mem::take(&mut self.cards)
     }
 
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.cards.len()
     }

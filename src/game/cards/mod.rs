@@ -137,8 +137,10 @@ pub enum CardId {
 pub struct CardDef {
     pub id: CardId,
     pub name: String,
+    #[allow(dead_code)]
     pub description: String,
     pub card_type: CardType,
+    #[allow(dead_code)]
     pub rarity: CardRarity,
     pub cost: f32,
     pub effect: CardEffect,
@@ -231,6 +233,7 @@ impl CardRegistry {
     }
 
     /// Get a card by name (case-insensitive).
+    #[allow(dead_code)]
     pub fn get_by_name(&self, name: &str) -> Option<&CardDef> {
         let name_lower = name.to_lowercase();
         self.cards
@@ -240,16 +243,19 @@ impl CardRegistry {
 
     /// Get a CardId by name (case-insensitive). Panics if not found.
     /// Use this for deck building with readable names.
+    #[allow(dead_code)]
     pub fn id(&self, name: &str) -> CardId {
         self.get_by_name(name)
             .unwrap_or_else(|| panic!("Card not found: {}", name))
             .id
     }
 
+    #[allow(dead_code)]
     pub fn all(&self) -> &[CardDef] {
         &self.cards
     }
 
+    #[allow(dead_code)]
     pub fn get_by_type(&self, card_type: CardType) -> Vec<&CardDef> {
         self.cards
             .iter()
@@ -257,19 +263,6 @@ impl CardRegistry {
             .collect()
     }
 }
-
-/// A card instance in a player's hand.
-#[derive(Component, Debug, Clone)]
-pub struct CardInHand {
-    pub card_id: CardId,
-}
-
-impl CardInHand {
-    pub fn new(card_id: CardId) -> Self {
-        Self { card_id }
-    }
-}
-
 /// Setup all cards at startup.
 fn setup_all_cards(mut registry: ResMut<CardRegistry>) {
     register_attack_cards(&mut registry);

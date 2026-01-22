@@ -44,12 +44,19 @@ pub fn plugin(app: &mut App) {
             handle_damage,
             handle_thorns_damage,
             handle_heal,
-            check_death,
-            handle_game_over,
         )
             .chain()
             .in_set(AppSystems::Update)
             .in_set(GameplaySystems::Health)
+            .run_if(is_offline)
+            .run_if(in_state(Screen::Gameplay))
+            .run_if(in_state(GameResult::Playing)),
+    );
+    app.add_systems(
+        Update,
+        (check_death, handle_game_over)
+            .chain()
+            .in_set(AppSystems::Update)
             .run_if(is_offline)
             .run_if(in_state(Screen::Gameplay)),
     );
@@ -62,11 +69,19 @@ pub fn plugin(app: &mut App) {
             handle_damage,
             handle_thorns_damage,
             handle_heal,
-            check_death,
-            handle_game_over,
         )
             .chain()
             .in_set(GameplaySystems::Health)
+            .run_if(is_online)
+            .run_if(in_state(Screen::Gameplay))
+            .run_if(in_state(GameResult::Playing)),
+    );
+    app.add_systems(
+        GgrsSchedule,
+        (check_death, handle_game_over)
+            .chain()
+            .after(GameplaySystems::Health)
+            .after(GameplaySystems::Tick)
             .run_if(is_online)
             .run_if(in_state(Screen::Gameplay)),
     );

@@ -6,7 +6,8 @@ use bevy_ggrs::{GgrsSchedule, GgrsTime};
 use crate::{
     AppSystems,
     game::{
-        BLOCK_DECAY_RATE, GameplaySystems, PlayerHandle, is_offline, is_online, opponent_entity,
+        BLOCK_DECAY_RATE, GameResult, GameplaySystems, PlayerHandle, is_offline, is_online,
+        opponent_entity,
     },
     screens::Screen,
 };
@@ -22,7 +23,8 @@ pub fn plugin(app: &mut App) {
             .chain()
             .in_set(AppSystems::TickTimers)
             .run_if(is_offline)
-            .run_if(in_state(Screen::Gameplay)),
+            .run_if(in_state(Screen::Gameplay))
+            .run_if(in_state(GameResult::Playing)),
     );
     app.add_systems(
         GgrsSchedule,
@@ -34,7 +36,8 @@ pub fn plugin(app: &mut App) {
             .chain()
             .in_set(GameplaySystems::Tick)
             .run_if(is_online)
-            .run_if(in_state(Screen::Gameplay)),
+            .run_if(in_state(Screen::Gameplay))
+            .run_if(in_state(GameResult::Playing)),
     );
 }
 
@@ -50,6 +53,7 @@ impl Strength {
         self.amount += amount;
     }
 
+    #[allow(dead_code)]
     pub fn modify_damage(&self, base_damage: f32) -> f32 {
         (base_damage + self.amount * 10.0).max(0.0)
     }

@@ -14,16 +14,6 @@ pub const INPUT_CARD_7: u16 = 1 << 7;
 pub const INPUT_CARD_8: u16 = 1 << 8;
 pub const INPUT_CARD_9: u16 = 1 << 9;
 pub const INPUT_CARD_10: u16 = 1 << 10;
-pub const INPUT_CARD_MASK: u16 = INPUT_CARD_1
-    | INPUT_CARD_2
-    | INPUT_CARD_3
-    | INPUT_CARD_4
-    | INPUT_CARD_5
-    | INPUT_CARD_6
-    | INPUT_CARD_7
-    | INPUT_CARD_8
-    | INPUT_CARD_9
-    | INPUT_CARD_10;
 
 /// Network-synchronized game input.
 #[repr(C)]
@@ -31,22 +21,6 @@ pub const INPUT_CARD_MASK: u16 = INPUT_CARD_1
 pub struct GameInput {
     /// Bitflags for input actions.
     pub flags: u16,
-}
-
-impl GameInput {
-    pub fn draw_pressed(&self) -> bool {
-        self.flags & INPUT_DRAW != 0
-    }
-
-    pub fn card_pressed(&self, index: usize) -> bool {
-        card_flag(index)
-            .map(|flag| self.flags & flag != 0)
-            .unwrap_or(false)
-    }
-
-    pub fn any_card_pressed(&self) -> bool {
-        self.flags & INPUT_CARD_MASK != 0
-    }
 }
 
 /// Map a hand index (0-9) to an input flag.
