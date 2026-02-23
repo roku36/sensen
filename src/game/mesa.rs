@@ -947,9 +947,9 @@ fn effect_lines(effect: &CardEffect, lines: &mut Vec<String>) {
         CardEffect::Rage(block) => lines.push(format!("RAGE {:.0}", block)),
         CardEffect::Metallicize(block) => lines.push(format!("METAL {:.0}/s", block)),
         CardEffect::Combust {
-            self_damage,
-            enemy_damage,
-        } => lines.push(format!("COMBUST -{:.0}/+{:.0}", self_damage, enemy_damage)),
+            self_damage_per_sec,
+            enemy_damage_per_sec,
+        } => lines.push(format!("COMBUST -{:.0}/+{:.0}/s", self_damage_per_sec, enemy_damage_per_sec)),
         CardEffect::DemonForm(str_per_sec) => lines.push(format!("DEMON +{:.0}STR/s", str_per_sec)),
         CardEffect::Barricade => lines.push("BARRICADE".to_string()),
         CardEffect::Juggernaut(dmg) => lines.push(format!("JUGG {:.0}", dmg)),
@@ -960,12 +960,12 @@ fn effect_lines(effect: &CardEffect, lines: &mut Vec<String>) {
         CardEffect::Rupture { strength } => lines.push(format!("RUPTURE +{:.0} STR", strength)),
         CardEffect::Corruption => lines.push("SKILL 0C EXH".to_string()),
         CardEffect::Brutality {
-            self_damage,
+            self_damage_per_sec,
             draw,
-            interval,
+            draw_interval,
         } => {
-            lines.push(format!("LOSE {:.0} HP/{:.0}s", self_damage, interval));
-            lines.push(format!("DRAW {}/{:.0}s", draw, interval));
+            lines.push(format!("LOSE {:.0} HP/s", self_damage_per_sec));
+            lines.push(format!("DRAW {}/{:.0}s", draw, draw_interval));
         }
         CardEffect::Exhaust => lines.push("EXHAUST".to_string()),
         CardEffect::AddStatus(_) => lines.push("+STATUS".to_string()),

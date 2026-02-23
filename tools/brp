@@ -167,23 +167,13 @@ show_block() {
 }
 
 show_buffs() {
-  local comps="\"${C_STR}\",\"${C_VULN}\",\"${C_WEAK}\",\"${C_THORNS}\""
-  local p_data o_data
-  p_data=$(query_player "$comps" "$F_LOCAL")
-  o_data=$(query_player "$comps" "$F_OPP")
-
-  local p_str p_vuln p_weak p_thorns o_str o_vuln o_weak o_thorns
-  p_str=$(extract_optional "$p_data" "$C_STR" "amount")
-  p_vuln=$(extract_optional "$p_data" "$C_VULN" "duration")
-  p_weak=$(extract_optional "$p_data" "$C_WEAK" "duration")
-  p_thorns=$(extract_optional "$p_data" "$C_THORNS" "damage")
-  o_str=$(extract_optional "$o_data" "$C_STR" "amount")
-  o_vuln=$(extract_optional "$o_data" "$C_VULN" "duration")
-  o_weak=$(extract_optional "$o_data" "$C_WEAK" "duration")
-  o_thorns=$(extract_optional "$o_data" "$C_THORNS" "damage")
-
-  echo "Player:   Str=${p_str} Vuln=${p_vuln}s Weak=${p_weak}s Thorns=${p_thorns}"
-  echo "Opponent: Str=${o_str} Vuln=${o_vuln}s Weak=${o_weak}s Thorns=${o_thorns}"
+  local data
+  data=$(brp_call "world.get_resources" "{\"resource\":\"sensen::game::ui::StatusSummary\"}")
+  local player opponent
+  player=$(echo "$data" | jq -r '.result.value.player // ""' 2>/dev/null)
+  opponent=$(echo "$data" | jq -r '.result.value.opponent // ""' 2>/dev/null)
+  echo "Player:   ${player:-(none)}"
+  echo "Opponent: ${opponent:-(none)}"
 }
 
 show_status() {

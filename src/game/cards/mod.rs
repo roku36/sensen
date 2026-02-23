@@ -183,8 +183,11 @@ pub enum CardEffect {
     Rage(f32),
     /// Gain Metallicize (gain block continuously)
     Metallicize(f32),
-    /// Gain Combust (deal damage to self and enemies periodically)
-    Combust { self_damage: f32, enemy_damage: f32 },
+    /// Gain Combust (continuous damage to self and enemies)
+    Combust {
+        self_damage_per_sec: f32,
+        enemy_damage_per_sec: f32,
+    },
     /// Gain Demon Form (gain strength over time)
     DemonForm(f32),
     /// Gain Barricade (block doesn't decay)
@@ -203,11 +206,11 @@ pub enum CardEffect {
     Rupture { strength: f32 },
     /// Skills cost 0 and exhaust when played
     Corruption,
-    /// Lose HP and draw on a periodic timer
+    /// Continuous self damage + periodic draw
     Brutality {
-        self_damage: f32,
+        self_damage_per_sec: f32,
         draw: u32,
-        interval: f32,
+        draw_interval: f32,
     },
     /// Exhaust this card (removed from deck for this combat)
     Exhaust,

@@ -367,12 +367,12 @@ fn apply_card_effect(
                 .insert(MetallicizeEffect::new(*block_per_second));
         }
         CardEffect::Combust {
-            self_damage,
-            enemy_damage,
+            self_damage_per_sec,
+            enemy_damage_per_sec,
         } => {
             commands
                 .entity(player)
-                .insert(CombustEffect::new(*self_damage, *enemy_damage));
+                .insert(CombustEffect::new(*self_damage_per_sec, *enemy_damage_per_sec));
         }
         CardEffect::DemonForm(strength_per_second) => {
             commands
@@ -414,13 +414,13 @@ fn apply_card_effect(
             commands.entity(player).insert(CorruptionEffect);
         }
         CardEffect::Brutality {
-            self_damage,
+            self_damage_per_sec,
             draw,
-            interval,
+            draw_interval,
         } => {
             commands
                 .entity(player)
-                .insert(BrutalityEffect::new(*self_damage, *draw, *interval));
+                .insert(BrutalityEffect::new(*self_damage_per_sec, *draw, *draw_interval));
         }
         CardEffect::Exhaust => {
             // Card is exhausted (removed from combat) - handled by deck system

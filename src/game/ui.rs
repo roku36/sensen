@@ -4,8 +4,10 @@ use bevy::prelude::*;
 
 use super::{
     Acceleration, BarricadeEffect, Block, BrutalityEffect, CombustEffect, CorruptionEffect, Cost,
-    DRAW_COUNT, Deck, DemonFormEffect, DiscardPile, GameResult, Hand, Health, LocalPlayer,
-    MetallicizeEffect, Opponent, PendingInput, RageEffect, Strength, Thorns, Vulnerable, Weak,
+    DRAW_COUNT, DarkEmbraceEffect, Deck, DemonFormEffect, DiscardPile, EvolveEffect,
+    FeelNoPainEffect, FireBreathingEffect, GameResult, Hand, Health, JuggernautEffect,
+    LocalPlayer, MetallicizeEffect, Opponent, PendingInput, RageEffect, RuptureEffect, Strength,
+    Thorns, Vulnerable, Weak,
     health::{DamageMessage, HealMessage},
 };
 use crate::{
@@ -15,6 +17,8 @@ use crate::{
 };
 
 pub fn plugin(app: &mut App) {
+    app.init_resource::<StatusSummary>();
+    app.register_type::<StatusSummary>();
     app.add_systems(OnEnter(Screen::Gameplay), spawn_game_ui);
     app.add_systems(
         Update,
@@ -146,6 +150,14 @@ struct PlayerStatusDisplay;
 /// Marker for opponent status effects display.
 #[derive(Component)]
 struct OpponentStatusDisplay;
+
+/// BRP-queryable resource containing formatted status strings.
+#[derive(Resource, Default, Reflect)]
+#[reflect(Resource)]
+pub struct StatusSummary {
+    pub player: String,
+    pub opponent: String,
+}
 
 fn spawn_game_ui(mut commands: Commands) {
     // Main game UI container
@@ -389,6 +401,7 @@ fn spawn_game_ui(mut commands: Commands) {
                                     Text::new(format!("Draw {}\n(0) [D]", DRAW_COUNT)),
                                     TextFont::from_font_size(14.0),
                                     TextColor(Color::WHITE),
+                                    Pickable::IGNORE,
                                 ),],
                             ),
                         ],
@@ -527,6 +540,17 @@ fn update_status_display(
         ),
         (With<LocalPlayer>, Without<Opponent>),
     >,
+    player_powers: Query<
+        (
+            Option<&DarkEmbraceEffect>,
+            Option<&EvolveEffect>,
+            Option<&FeelNoPainEffect>,
+            Option<&FireBreathingEffect>,
+            Option<&RuptureEffect>,
+            Option<&JuggernautEffect>,
+        ),
+        (With<LocalPlayer>, Without<Opponent>),
+    >,
     opponent_query: Query<
         (
             &Strength,
@@ -543,25 +567,39 @@ fn update_status_display(
         ),
         (With<Opponent>, Without<LocalPlayer>),
     >,
+    opponent_powers: Query<
+        (
+            Option<&DarkEmbraceEffect>,
+            Option<&EvolveEffect>,
+            Option<&FeelNoPainEffect>,
+            Option<&FireBreathingEffect>,
+            Option<&RuptureEffect>,
+            Option<&JuggernautEffect>,
+        ),
+        (With<Opponent>, Without<LocalPlayer>),
+    >,
     mut text_query: ParamSet<(
         Query<&mut Text, With<PlayerStatusDisplay>>,
         Query<&mut Text, With<OpponentStatusDisplay>>,
     )>,
+    mut summary: ResMut<StatusSummary>,
 ) {
     // Update player status
-    if let Ok(components) = player_query.single() {
-        let status = build_status_string(components);
+    if let (Ok(base), Ok(powers)) = (player_query.single(), player_powers.single()) {
+        let status = build_status_string(base, powers);
         for mut text in text_query.p0().iter_mut() {
             text.0.clone_from(&status);
         }
+        summary.player = status;
     }
 
     // Update opponent status
-    if let Ok(components) = opponent_query.single() {
-        let status = build_status_string(components);
+    if let (Ok(base), Ok(powers)) = (opponent_query.single(), opponent_powers.single()) {
+        let status = build_status_string(base, powers);
         for mut text in text_query.p1().iter_mut() {
             text.0.clone_from(&status);
         }
+        summary.opponent = status;
     }
 }
 
@@ -579,6 +617,14 @@ fn build_status_string(
         Option<&CombustEffect>,
         Option<&CorruptionEffect>,
         Option<&BrutalityEffect>,
+    ),
+    (dark_embrace, evolve, feel_no_pain, fire_breathing, rupture, juggernaut): (
+        Option<&DarkEmbraceEffect>,
+        Option<&EvolveEffect>,
+        Option<&FeelNoPainEffect>,
+        Option<&FireBreathingEffect>,
+        Option<&RuptureEffect>,
+        Option<&JuggernautEffect>,
     ),
 ) -> String {
     let mut effects = Vec::new();
@@ -615,15 +661,33 @@ fn build_status_string(
     }
     if let Some(c) = combust {
         effects.push(format!(
-            "Combust({:.0}/{:.0})",
-            c.self_damage, c.enemy_damage
+            "Combust({:.0}/{:.0}/s)",
+            c.self_damage_per_sec, c.enemy_damage_per_sec
         ));
     }
     if corrupt.is_some() {
         effects.push("Corrupt".to_string());
     }
     if let Some(b) = brutal {
-        effects.push(format!("Brutal({:.0}dmg/+{})", b.self_damage, b.draw));
+        effects.push(format!("Brutal({:.0}/s +{})", b.self_damage_per_sec, b.draw));
+    }
+    if let Some(de) = dark_embrace {
+        effects.push(format!("DkEmb+{}", de.draw_on_exhaust));
+    }
+    if let Some(ev) = evolve {
+        effects.push(format!("Evolve+{}", ev.draw_on_status));
+    }
+    if let Some(fnp) = feel_no_pain {
+        effects.push(format!("FNP+{:.0}", fnp.block_on_exhaust));
+    }
+    if let Some(fb) = fire_breathing {
+        effects.push(format!("FBrea+{:.0}", fb.damage_on_status_draw));
+    }
+    if let Some(r) = rupture {
+        effects.push(format!("Rupt+{:.0}", r.strength_on_self_damage));
+    }
+    if let Some(j) = juggernaut {
+        effects.push(format!("Jugg+{:.0}", j.damage_on_block));
     }
 
     if effects.is_empty() {

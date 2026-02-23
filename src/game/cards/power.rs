@@ -7,17 +7,17 @@ use super::{CardDef, CardEffect, CardId, CardRarity, CardRegistry, CardType};
 pub fn register_power_cards(registry: &mut CardRegistry) {
     // === UNCOMMON POWERS ===
 
-    // 200: Combust - Periodic damage to self and enemies
+    // 200: Combust - Continuous damage to self and enemies
     registry.register(CardDef {
         id: CardId::Combust,
         name: "Combust".to_string(),
-        description: "Every second, lose 10 HP and deal 50 damage.".to_string(),
+        description: "Continuously lose 5 HP/s and deal 25 damage/s.".to_string(),
         card_type: CardType::Power,
         rarity: CardRarity::Uncommon,
         cost: 1.0,
         effect: CardEffect::Combust {
-            self_damage: 10.0,
-            enemy_damage: 50.0,
+            self_damage_per_sec: 5.0,
+            enemy_damage_per_sec: 25.0,
         },
     });
 
@@ -128,18 +128,18 @@ pub fn register_power_cards(registry: &mut CardRegistry) {
         ]),
     });
 
-    // 210: Brutality - Draw at start, lose HP
+    // 210: Brutality - Continuous self damage + periodic draw
     registry.register(CardDef {
         id: CardId::Brutality,
         name: "Brutality".to_string(),
-        description: "Every 3s, lose 10 HP and draw 1 card.".to_string(),
+        description: "Lose 5 HP/s. Draw 1 card every 3s.".to_string(),
         card_type: CardType::Power,
         rarity: CardRarity::Rare,
         cost: 0.5,
         effect: CardEffect::Brutality {
-            self_damage: 10.0,
+            self_damage_per_sec: 5.0,
             draw: 1,
-            interval: 3.0,
+            draw_interval: 3.0,
         },
     });
 

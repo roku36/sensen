@@ -178,21 +178,19 @@ impl JuggernautEffect {
     }
 }
 
-/// Combust - periodic damage to self and enemies.
+/// Combust - continuous damage to self and enemies (per second rates).
 #[derive(Component, Debug, Default, Clone, Reflect)]
 #[reflect(Component)]
 pub struct CombustEffect {
-    pub self_damage: f32,
-    pub enemy_damage: f32,
-    pub timer: f32,
+    pub self_damage_per_sec: f32,
+    pub enemy_damage_per_sec: f32,
 }
 
 impl CombustEffect {
-    pub fn new(self_damage: f32, enemy_damage: f32) -> Self {
+    pub fn new(self_damage_per_sec: f32, enemy_damage_per_sec: f32) -> Self {
         Self {
-            self_damage,
-            enemy_damage,
-            timer: 0.0,
+            self_damage_per_sec,
+            enemy_damage_per_sec,
         }
     }
 }
@@ -271,23 +269,23 @@ impl RuptureEffect {
 #[reflect(Component)]
 pub struct CorruptionEffect;
 
-/// Brutality - periodic self damage and draw.
+/// Brutality - continuous self damage + periodic draw.
 #[derive(Component, Debug, Default, Clone, Reflect)]
 #[reflect(Component)]
 pub struct BrutalityEffect {
-    pub self_damage: f32,
+    pub self_damage_per_sec: f32,
     pub draw: u32,
-    pub interval: f32,
-    pub timer: f32,
+    pub draw_interval: f32,
+    pub draw_timer: f32,
 }
 
 impl BrutalityEffect {
-    pub fn new(self_damage: f32, draw: u32, interval: f32) -> Self {
+    pub fn new(self_damage_per_sec: f32, draw: u32, draw_interval: f32) -> Self {
         Self {
-            self_damage,
+            self_damage_per_sec,
             draw,
-            interval,
-            timer: 0.0,
+            draw_interval,
+            draw_timer: 0.0,
         }
     }
 }
@@ -419,57 +417,48 @@ fn tick_power_effects_delta(
         }
     }
 
-    // Combust: periodic damage (direct application)
-    for (entity, mut combust) in &mut combust_query {
-        combust.timer += delta;
-        while combust.timer >= 1.0 {
-            combust.timer -= 1.0;
-
-            // Self damage (power damage bypasses block for self-inflicted)
-            if combust.self_damage > 0.0 {
-                if let Ok((mut health, _)) = health_block_query.get_mut(entity) {
-                    health.take_damage(combust.self_damage);
-                }
+    // Combust: continuous damage (applied every frame)
+    for (entity, combust) in &mut combust_query {
+        // Self damage (power damage bypasses block for self-inflicted)
+        if combust.self_damage_per_sec > 0.0 {
+            if let Ok((mut health, _)) = health_block_query.get_mut(entity) {
+                health.take_damage(combust.self_damage_per_sec * delta);
             }
+        }
 
-            // Enemy damage (goes through block)
-            if combust.enemy_damage > 0.0 {
-                if let Some(opponent) = opponent_entity(entity, &players) {
-                    if let Ok((mut health, mut block)) = health_block_query.get_mut(opponent) {
-                        let mut remaining = combust.enemy_damage;
-                        let absorbed = remaining.min(block.current);
-                        block.current = (block.current - absorbed).max(0.0);
-                        remaining -= absorbed;
-                        if remaining > 0.0 {
-                            health.take_damage(remaining);
-                        }
+        // Enemy damage (goes through block)
+        if combust.enemy_damage_per_sec > 0.0 {
+            if let Some(opponent) = opponent_entity(entity, &players) {
+                if let Ok((mut health, mut block)) = health_block_query.get_mut(opponent) {
+                    let mut remaining = combust.enemy_damage_per_sec * delta;
+                    let absorbed = remaining.min(block.current);
+                    block.current = (block.current - absorbed).max(0.0);
+                    remaining -= absorbed;
+                    if remaining > 0.0 {
+                        health.take_damage(remaining);
                     }
                 }
             }
         }
     }
 
-    // Brutality: periodic self damage and draw (direct application)
+    // Brutality: continuous self damage + periodic draw
     for (entity, mut brutality) in &mut brutality_query {
-        if brutality.interval <= 0.0 {
-            continue;
-        }
-        brutality.timer += delta;
-        while brutality.timer >= brutality.interval {
-            brutality.timer -= brutality.interval;
-
-            // Self damage (power damage)
-            if brutality.self_damage > 0.0 {
-                if let Ok((mut health, _)) = health_block_query.get_mut(entity) {
-                    health.take_damage(brutality.self_damage);
-                }
+        // Continuous self damage
+        if brutality.self_damage_per_sec > 0.0 {
+            if let Ok((mut health, _)) = health_block_query.get_mut(entity) {
+                health.take_damage(brutality.self_damage_per_sec * delta);
             }
+        }
 
-            // Draw cards directly
-            if brutality.draw > 0 {
+        // Periodic draw (discrete event, keeps timer)
+        if brutality.draw > 0 && brutality.draw_interval > 0.0 {
+            brutality.draw_timer += delta;
+            while brutality.draw_timer >= brutality.draw_interval {
+                brutality.draw_timer -= brutality.draw_interval;
+
                 if let Ok((mut deck, mut hand, mut discard)) = deck_query.get_mut(entity) {
                     for _ in 0..brutality.draw {
-                        // Reshuffle if needed
                         if deck.is_empty() && !discard.is_empty() {
                             let recycled = discard.take_all();
                             deck.add_cards(recycled);

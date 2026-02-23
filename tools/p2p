@@ -1,0 +1,19 @@
+#!/bin/bash
+# P2P対戦テスト用: クライアント2つ起動
+
+# matchbox_server が無ければ起動
+if ! pgrep -f matchbox_server > /dev/null; then
+  echo "matchbox_server を起動..."
+  matchbox_server &
+  sleep 1
+fi
+
+echo "Client 1 (port 15702) 起動..."
+cargo run --features dev -- --brp-port=15702 &
+
+sleep 2
+
+echo "Client 2 (port 15703) 起動..."
+cargo run --features dev -- --brp-port=15703 &
+
+wait
