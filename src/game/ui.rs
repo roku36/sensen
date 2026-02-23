@@ -380,9 +380,9 @@ fn spawn_game_ui(mut commands: Commands) {
                                     height: px(60),
                                     align_items: AlignItems::Center,
                                     justify_content: JustifyContent::Center,
+                                    border_radius: BorderRadius::all(px(8)),
                                     ..default()
                                 },
-                                BorderRadius::all(px(8)),
                                 BackgroundColor(Color::srgb(0.4, 0.2, 0.6)),
                                 children![(
                                     DrawButtonText,

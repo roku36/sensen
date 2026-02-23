@@ -248,7 +248,7 @@ fn spawn_mesa_scene(
 ) {
     info!("spawn_mesa_scene called!");
 
-    commands.insert_resource(AmbientLight {
+    commands.insert_resource(GlobalAmbientLight {
         color: Color::WHITE,
         brightness: 800.0,
         affects_lightmapped_meshes: true,

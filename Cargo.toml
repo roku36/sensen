@@ -5,13 +5,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = { version = "0.17", features = ["bevy_remote", "shader_format_wesl"] }
-bevy_ggrs = "0.19"
-bevy_matchbox = { version = "0.13", features = ["ggrs"] }
-bevy_la_mesa = "0.17.0"
-bevy_defer = "0.15"
-bevy_rich_text3d = { version = "0.5.0", default-features = false, features = ["3d"] }
-bevy_tweening = "0.14"
+bevy = { version = "0.18", features = ["bevy_remote", "shader_format_wesl"] }
+bevy_ggrs = "0.20"
+bevy_matchbox = { version = "0.14", features = ["ggrs"] }
+bevy_la_mesa = { path = "third_party/bevy_la_mesa" }
+bevy_defer = "0.17"
+bevy_rich_text3d = { version = "0.6.0", default-features = false, features = ["3d"] }
+bevy_tweening = "0.15"
 serde = { version = "1.0", features = ["derive"] }
 bytemuck = { version = "1.14", features = ["derive"] }
 # Compile out low-severity logs to improve performance.
@@ -24,8 +24,8 @@ tracing = { version = "0.1", features = [
 
 [target.wasm32-unknown-unknown.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }
-bevy_ggrs = { version = "0.19", features = ["wasm-bindgen"] }
-bevy_matchbox = { version = "0.13", features = ["ggrs"] }
+bevy_ggrs = { version = "0.20", features = ["wasm-bindgen"] }
+bevy_matchbox = { version = "0.14", features = ["ggrs"] }
 
 [features]
 # Default to a native dev build.

@@ -46,7 +46,6 @@ impl Plugin for AppPlugin {
                     .into(),
                     ..default()
                 }),
-            MeshPickingPlugin,
             AsyncPlugin::default_settings(),
             Text3dPlugin {
                 load_system_fonts: true,
