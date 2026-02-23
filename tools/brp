@@ -1,0 +1,271 @@
+#!/usr/bin/env bash
+# brp - Sensen BRP (Bevy Remote Protocol) CLI wrapper
+# Usage: brp <command> [args...] [--port PORT]
+#
+# Commands:
+#   hp, health       Show HP for both players
+#   cost             Show cost state
+#   hand             Show hand cards
+#   deck             Show deck/discard counts
+#   status           Show all game state (HP, cost, hand, statuses)
+#   block            Show block values
+#   buffs            Show status effects (str/vuln/weak/powers)
+#   draw             Simulate draw input (GGRS synced)
+#   play N           Simulate playing card N (GGRS synced)
+#   goto SCREEN      Screen transition (Title/Lobby/Gameplay)
+#   screenshot [path] Take screenshot
+#   query COMPONENT  Raw component query (with LocalPlayer filter)
+#   raw METHOD JSON  Raw BRP call
+
+set -euo pipefail
+
+PORT=15702
+CMD=""
+ARGS=()
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --port|-p) PORT="$2"; shift 2 ;;
+    *)
+      if [[ -z "$CMD" ]]; then
+        CMD="$1"
+      else
+        ARGS+=("$1")
+      fi
+      shift ;;
+  esac
+done
+
+BASE="http://127.0.0.1:${PORT}/brp"
+
+# ── helpers ──────────────────────────────────────────────────────────────
+
+brp_call() {
+  local method="$1" params="$2"
+  curl -sf -X POST "$BASE" \
+    -H "Content-Type: application/json" \
+    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"${method}\",\"params\":${params}}" 2>/dev/null
+}
+
+query_player() {
+  local components="$1" filter="$2"
+  brp_call "world.query" "{\"data\":{\"components\":[${components}]},\"filter\":{\"with\":[\"${filter}\"]}}"
+}
+
+insert_resource() {
+  local resource="$1" value="$2"
+  brp_call "world.insert_resources" "{\"resource\":\"${resource}\",\"value\":\"${value}\"}"
+}
+
+# Extract a field from query result: extract_field <json> <component_path> <field>
+extract_field() {
+  echo "$1" | jq -r ".result[0].components[\"$2\"].$3 // empty" 2>/dev/null
+}
+
+# Extract optional component (returns "none" if missing)
+extract_optional() {
+  local val
+  val=$(echo "$1" | jq -r ".result[0].components[\"$2\"].$3 // empty" 2>/dev/null)
+  echo "${val:-0}"
+}
+
+C_HP="sensen::game::health::Health"
+C_BLOCK="sensen::game::health::Block"
+C_THORNS="sensen::game::health::Thorns"
+C_COST="sensen::game::cost::Cost"
+C_ACCEL="sensen::game::cost::Acceleration"
+C_HAND="sensen::game::deck::Hand"
+C_DECK="sensen::game::deck::Deck"
+C_DISCARD="sensen::game::deck::DiscardPile"
+C_STR="sensen::game::status::Strength"
+C_VULN="sensen::game::status::Vulnerable"
+C_WEAK="sensen::game::status::Weak"
+C_RAGE="sensen::game::status::RageEffect"
+C_METAL="sensen::game::status::MetallicizeEffect"
+C_DEMON="sensen::game::status::DemonFormEffect"
+C_BARR="sensen::game::status::BarricadeEffect"
+C_BRUT="sensen::game::status::BrutalityEffect"
+C_COMBUST="sensen::game::status::CombustEffect"
+C_CORRUPT="sensen::game::status::CorruptionEffect"
+C_JUGG="sensen::game::status::JuggernautEffect"
+F_LOCAL="sensen::game::player::LocalPlayer"
+F_OPP="sensen::game::player::Opponent"
+
+# ── commands ─────────────────────────────────────────────────────────────
+
+show_hp() {
+  local p_data o_data
+  p_data=$(query_player "\"${C_HP}\",\"${C_BLOCK}\"" "$F_LOCAL")
+  o_data=$(query_player "\"${C_HP}\",\"${C_BLOCK}\"" "$F_OPP")
+
+  if [[ -z "$p_data" || -z "$o_data" ]]; then
+    echo "ERROR: Cannot connect to BRP at port ${PORT}"
+    exit 1
+  fi
+
+  local p_hp p_max p_blk o_hp o_max o_blk
+  p_hp=$(extract_field "$p_data" "$C_HP" "current")
+  p_max=$(extract_field "$p_data" "$C_HP" "max")
+  p_blk=$(extract_optional "$p_data" "$C_BLOCK" "current")
+  o_hp=$(extract_field "$o_data" "$C_HP" "current")
+  o_max=$(extract_field "$o_data" "$C_HP" "max")
+  o_blk=$(extract_optional "$o_data" "$C_BLOCK" "current")
+
+  printf "Player: %.0f/%.0f HP" "$p_hp" "$p_max"
+  [[ "$p_blk" != "0" ]] && printf ", %.0f Block" "$p_blk"
+  printf " | Opponent: %.0f/%.0f HP" "$o_hp" "$o_max"
+  [[ "$o_blk" != "0" ]] && printf ", %.0f Block" "$o_blk"
+  echo
+}
+
+show_cost() {
+  local data
+  data=$(query_player "\"${C_COST}\"" "$F_LOCAL")
+  local cur rate
+  cur=$(extract_field "$data" "$C_COST" "current")
+  rate=$(extract_field "$data" "$C_COST" "rate")
+  printf "Cost: %.1f (rate: %.1f/s)\n" "$cur" "$rate"
+}
+
+show_hand() {
+  local data
+  data=$(query_player "\"${C_HAND}\"" "$F_LOCAL")
+  local cards
+  cards=$(echo "$data" | jq -r ".result[0].components[\"${C_HAND}\"].cards // []" 2>/dev/null)
+  local count
+  count=$(echo "$cards" | jq 'length' 2>/dev/null)
+  local card_list
+  card_list=$(echo "$cards" | jq -r 'join(", ")' 2>/dev/null)
+  echo "Hand (${count}): [${card_list}]"
+}
+
+show_deck() {
+  local d_data h_data dp_data
+  d_data=$(query_player "\"${C_DECK}\"" "$F_LOCAL")
+  h_data=$(query_player "\"${C_HAND}\"" "$F_LOCAL")
+  dp_data=$(query_player "\"${C_DISCARD}\"" "$F_LOCAL")
+
+  local deck_n hand_n disc_n
+  deck_n=$(echo "$d_data" | jq ".result[0].components[\"${C_DECK}\"].cards | length" 2>/dev/null)
+  hand_n=$(echo "$h_data" | jq ".result[0].components[\"${C_HAND}\"].cards | length" 2>/dev/null)
+  disc_n=$(echo "$dp_data" | jq ".result[0].components[\"${C_DISCARD}\"].cards | length" 2>/dev/null)
+
+  echo "Deck: ${deck_n} | Hand: ${hand_n} | Discard: ${disc_n}"
+}
+
+show_block() {
+  local p_data o_data
+  p_data=$(query_player "\"${C_BLOCK}\"" "$F_LOCAL")
+  o_data=$(query_player "\"${C_BLOCK}\"" "$F_OPP")
+
+  local p_blk o_blk
+  p_blk=$(extract_optional "$p_data" "$C_BLOCK" "current")
+  o_blk=$(extract_optional "$o_data" "$C_BLOCK" "current")
+
+  printf "Player Block: %.0f | Opponent Block: %.0f\n" "$p_blk" "$o_blk"
+}
+
+show_buffs() {
+  local comps="\"${C_STR}\",\"${C_VULN}\",\"${C_WEAK}\",\"${C_THORNS}\""
+  local p_data o_data
+  p_data=$(query_player "$comps" "$F_LOCAL")
+  o_data=$(query_player "$comps" "$F_OPP")
+
+  local p_str p_vuln p_weak p_thorns o_str o_vuln o_weak o_thorns
+  p_str=$(extract_optional "$p_data" "$C_STR" "amount")
+  p_vuln=$(extract_optional "$p_data" "$C_VULN" "duration")
+  p_weak=$(extract_optional "$p_data" "$C_WEAK" "duration")
+  p_thorns=$(extract_optional "$p_data" "$C_THORNS" "damage")
+  o_str=$(extract_optional "$o_data" "$C_STR" "amount")
+  o_vuln=$(extract_optional "$o_data" "$C_VULN" "duration")
+  o_weak=$(extract_optional "$o_data" "$C_WEAK" "duration")
+  o_thorns=$(extract_optional "$o_data" "$C_THORNS" "damage")
+
+  echo "Player:   Str=${p_str} Vuln=${p_vuln}s Weak=${p_weak}s Thorns=${p_thorns}"
+  echo "Opponent: Str=${o_str} Vuln=${o_vuln}s Weak=${o_weak}s Thorns=${o_thorns}"
+}
+
+show_status() {
+  show_hp
+  show_cost
+  show_hand
+  show_deck
+  show_buffs
+}
+
+do_draw() {
+  insert_resource "sensen::network::input::SimulatedGgrsInput" "D" > /dev/null
+  echo "OK: Draw"
+}
+
+do_play() {
+  local n="${ARGS[0]:-1}"
+  insert_resource "sensen::network::input::SimulatedGgrsInput" "$n" > /dev/null
+  echo "OK: Play card ${n}"
+}
+
+do_goto() {
+  local screen="${ARGS[0]:-Lobby}"
+  insert_resource "sensen::screens::GotoScreen" "$screen" > /dev/null
+  echo "OK: Goto ${screen}"
+}
+
+do_screenshot() {
+  local path="${ARGS[0]:-/tmp/sensen_screenshot.png}"
+  brp_call "brp_extras/screenshot" "{\"path\":\"${path}\"}" > /dev/null
+  echo "OK: Screenshot saved to ${path}"
+}
+
+do_query() {
+  local component="${ARGS[0]}"
+  query_player "\"${component}\"" "$F_LOCAL" | jq '.result[0].components'
+}
+
+do_raw() {
+  local method="${ARGS[0]}" params="${ARGS[1]:-{}}"
+  brp_call "$method" "$params" | jq '.'
+}
+
+# ── main ─────────────────────────────────────────────────────────────────
+
+case "${CMD:-help}" in
+  hp|health)    show_hp ;;
+  cost)         show_cost ;;
+  hand)         show_hand ;;
+  deck)         show_deck ;;
+  block)        show_block ;;
+  buffs)        show_buffs ;;
+  status)       show_status ;;
+  draw)         do_draw ;;
+  play)         do_play ;;
+  goto)         do_goto ;;
+  screenshot|ss) do_screenshot ;;
+  query)        do_query ;;
+  raw)          do_raw ;;
+  help|*)
+    cat <<'HELP'
+brp - Sensen BRP CLI
+
+Usage: brp <command> [args] [--port PORT]
+
+  hp, health     HP & Block for both players
+  cost           Cost state
+  hand           Hand cards (IDs)
+  deck           Deck/Hand/Discard counts
+  block          Block values
+  buffs          Status effects (Str/Vuln/Weak/Thorns)
+  status         All of the above combined
+
+  draw           Simulate draw (GGRS synced)
+  play N         Play card N (GGRS synced)
+  goto SCREEN    Screen transition (Title/Lobby/Gameplay)
+  screenshot [p] Take screenshot
+
+  query COMP     Raw component query
+  raw METHOD JSON  Raw BRP call
+
+Default port: 15702
+HELP
+    ;;
+esac

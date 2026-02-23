@@ -6,6 +6,7 @@ use super::{
     Acceleration, BarricadeEffect, Block, BrutalityEffect, CombustEffect, CorruptionEffect, Cost,
     DRAW_COUNT, Deck, DemonFormEffect, DiscardPile, GameResult, Hand, Health, LocalPlayer,
     MetallicizeEffect, Opponent, PendingInput, RageEffect, Strength, Thorns, Vulnerable, Weak,
+    health::{DamageMessage, HealMessage},
 };
 use crate::{
     AppSystems,
@@ -21,6 +22,10 @@ pub fn plugin(app: &mut App) {
             update_cost_display,
             update_deck_display,
             update_health_display,
+            spawn_damage_flash,
+            update_damage_flash,
+            spawn_heal_flash,
+            update_heal_flash,
         )
             .in_set(AppSystems::Update)
             .run_if(in_state(Screen::Gameplay))
@@ -117,9 +122,22 @@ struct OpponentThornsDisplay;
 #[derive(Component)]
 struct DrawButton;
 
-/// Marker for draw button text (to show cost).
 #[derive(Component)]
 struct DrawButtonText;
+
+/// Marker for the damage flash overlay.
+#[derive(Component)]
+struct DamageFlashOverlay {
+    start_time: f32,
+    duration: f32,
+}
+
+/// Marker for the heal flash overlay.
+#[derive(Component)]
+struct HealFlashOverlay {
+    start_time: f32,
+    duration: f32,
+}
 
 /// Marker for player status effects display.
 #[derive(Component)]
@@ -699,6 +717,136 @@ fn handle_result_input(
 
 /// Handle simulated input from BRP (dev only).
 #[cfg(feature = "dev")]
+// ============================================================================
+// Damage Flash Effect
+// ============================================================================
+
+fn spawn_damage_flash(
+    mut commands: Commands,
+    mut messages: MessageReader<DamageMessage>,
+    player_query: Query<Entity, With<LocalPlayer>>,
+    time: Res<Time>,
+    existing_flash: Query<Entity, With<DamageFlashOverlay>>,
+) {
+    let Ok(player_entity) = player_query.single() else {
+        return;
+    };
+
+    for msg in messages.read() {
+        // Only show flash when local player takes damage
+        if msg.target != player_entity || msg.amount <= 0.0 {
+            continue;
+        }
+
+        // Don't spawn multiple flashes - just reset existing one
+        for entity in existing_flash.iter() {
+            commands.entity(entity).despawn();
+        }
+
+        // Create full-screen red flash overlay
+        commands.spawn((
+            Name::new("Damage Flash Overlay"),
+            DamageFlashOverlay {
+                start_time: time.elapsed_secs(),
+                duration: 0.3,
+            },
+            Node {
+                position_type: PositionType::Absolute,
+                width: percent(100),
+                height: percent(100),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(1.0, 0.0, 0.0, 0.4)),
+            Pickable::IGNORE,
+            GlobalZIndex(100), // Above everything else
+            DespawnOnExit(Screen::Gameplay),
+        ));
+    }
+}
+
+fn update_damage_flash(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut flash_query: Query<(Entity, &DamageFlashOverlay, &mut BackgroundColor)>,
+) {
+    for (entity, flash, mut bg_color) in flash_query.iter_mut() {
+        let elapsed = time.elapsed_secs() - flash.start_time;
+        let progress = (elapsed / flash.duration).clamp(0.0, 1.0);
+
+        // Fade out the flash
+        let alpha = 0.4 * (1.0 - progress);
+        bg_color.0 = Color::srgba(1.0, 0.0, 0.0, alpha);
+
+        // Remove when done
+        if progress >= 1.0 {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+fn spawn_heal_flash(
+    mut commands: Commands,
+    mut messages: MessageReader<HealMessage>,
+    player_query: Query<Entity, With<LocalPlayer>>,
+    time: Res<Time>,
+    existing_flash: Query<Entity, With<HealFlashOverlay>>,
+) {
+    let Ok(player_entity) = player_query.single() else {
+        return;
+    };
+
+    for msg in messages.read() {
+        // Only show flash when local player heals
+        if msg.target != player_entity || msg.amount <= 0.0 {
+            continue;
+        }
+
+        // Don't spawn multiple flashes - just reset existing one
+        for entity in existing_flash.iter() {
+            commands.entity(entity).despawn();
+        }
+
+        // Create full-screen green flash overlay
+        commands.spawn((
+            Name::new("Heal Flash Overlay"),
+            HealFlashOverlay {
+                start_time: time.elapsed_secs(),
+                duration: 0.4,
+            },
+            Node {
+                position_type: PositionType::Absolute,
+                width: percent(100),
+                height: percent(100),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.2, 1.0, 0.3, 0.3)),
+            Pickable::IGNORE,
+            GlobalZIndex(100),
+            DespawnOnExit(Screen::Gameplay),
+        ));
+    }
+}
+
+fn update_heal_flash(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut flash_query: Query<(Entity, &HealFlashOverlay, &mut BackgroundColor)>,
+) {
+    for (entity, flash, mut bg_color) in flash_query.iter_mut() {
+        let elapsed = time.elapsed_secs() - flash.start_time;
+        let progress = (elapsed / flash.duration).clamp(0.0, 1.0);
+
+        // Fade out the flash
+        let alpha = 0.3 * (1.0 - progress);
+        bg_color.0 = Color::srgba(0.2, 1.0, 0.3, alpha);
+
+        // Remove when done
+        if progress >= 1.0 {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
 fn handle_simulated_input(
     mut commands: Commands,
     sim_input: Option<Res<SimulateInput>>,

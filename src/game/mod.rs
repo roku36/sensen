@@ -9,6 +9,7 @@ mod input_buffer;
 mod mesa;
 mod player;
 mod rules;
+mod shaders;
 mod status;
 mod ui;
 
@@ -101,6 +102,7 @@ pub fn plugin(app: &mut App) {
         input_buffer::plugin,
         mesa::plugin,
         player::plugin,
+        shaders::plugin,
         status::plugin,
         ui::plugin,
     ));

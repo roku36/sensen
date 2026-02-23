@@ -5,7 +5,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = { version = "0.17", features = ["bevy_remote"] }
+bevy = { version = "0.17", features = ["bevy_remote", "shader_format_wesl"] }
 bevy_ggrs = "0.19"
 bevy_matchbox = { version = "0.13", features = ["ggrs"] }
 bevy_la_mesa = "0.17.0"

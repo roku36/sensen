@@ -3,7 +3,7 @@
 use bevy::{ecs::message::Message, prelude::*};
 use bevy_ggrs::GgrsSchedule;
 
-use super::{CardEffect, CardId};
+use super::{CardEffect, CardId, MAX_HAND_SIZE};
 use crate::game::{
     CardRegistry, CardType, CorruptionEffect, DamageKind, DamageMessage, EvolveEffect,
     FireBreathingEffect, PlayerHandle, opponent_entity,
@@ -255,6 +255,11 @@ fn handle_draw_cards(
 
         let mut draws_remaining = msg.count;
         while draws_remaining > 0 {
+            // Check hand size limit
+            if hand.len() >= MAX_HAND_SIZE {
+                break;
+            }
+
             draws_remaining -= 1;
 
             // If deck is empty, recycle discard pile back into deck

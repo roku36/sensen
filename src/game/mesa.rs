@@ -18,6 +18,14 @@ use super::{
 };
 use crate::{AppSystems, input::card_flag, screens::Screen};
 
+/// Marker for the glow overlay mesh attached to cards.
+#[derive(Component)]
+struct CardGlowOverlay;
+
+/// Marker indicating a card has a glow overlay attached.
+#[derive(Component)]
+struct HasGlowOverlay;
+
 /// Marker component for cards that have effect text added.
 #[derive(Component)]
 struct CardEffectTextAdded;
@@ -183,6 +191,7 @@ pub fn plugin(app: &mut App) {
             sync_played_cards,
             add_effect_text_to_cards,
             track_hand_hover,
+            update_card_glow_on_hover,
         )
             .chain()
             .in_set(AppSystems::Update)
@@ -1245,5 +1254,80 @@ fn fan_hand_layout(
                 }
             }
         }
+    }
+}
+
+// ============================================================================
+// Card Glow Effects (using StandardMaterial emissive)
+// ============================================================================
+
+/// Updates glow effect on hovered cards using StandardMaterial emissive.
+fn update_card_glow_on_hover(
+    mut commands: Commands,
+    hovered_cards: Query<(Entity, &MesaHand), With<HoveredCard>>,
+    non_hovered_cards: Query<(Entity, &MesaHand), Without<HoveredCard>>,
+    has_glow_query: Query<&HasGlowOverlay>,
+    children_query: Query<&Children>,
+    glow_overlays: Query<Entity, With<CardGlowOverlay>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    // Add glow to hovered cards
+    for (entity, hand) in hovered_cards.iter() {
+        // Only glow local player's cards
+        if hand.player != LOCAL_PLAYER_INDEX {
+            continue;
+        }
+
+        // Check if already has glow
+        if has_glow_query.get(entity).is_ok() {
+            continue;
+        }
+
+        // Create glow overlay mesh using StandardMaterial with emissive
+        let glow_mesh = meshes.add(Plane3d::default().mesh().size(2.7, 3.7).subdivisions(4));
+        let glow_material = materials.add(StandardMaterial {
+            base_color: Color::srgba(1.0, 0.9, 0.3, 0.3),
+            emissive: LinearRgba::new(1.0, 0.8, 0.2, 1.0) * 2.0,
+            alpha_mode: AlphaMode::Blend,
+            unlit: true,
+            ..default()
+        });
+
+        let overlay_entity = commands
+            .spawn((
+                Name::new("Card Glow Overlay"),
+                CardGlowOverlay,
+                Mesh3d(glow_mesh),
+                MeshMaterial3d(glow_material),
+                Transform::from_xyz(0.0, 0.002, 0.0),
+            ))
+            .id();
+
+        commands.entity(entity).insert(HasGlowOverlay);
+        commands.entity(entity).add_child(overlay_entity);
+    }
+
+    // Remove glow from non-hovered cards
+    for (entity, hand) in non_hovered_cards.iter() {
+        if hand.player != LOCAL_PLAYER_INDEX {
+            continue;
+        }
+
+        // Skip if no glow
+        if has_glow_query.get(entity).is_err() {
+            continue;
+        }
+
+        // Remove glow overlay children
+        if let Ok(children) = children_query.get(entity) {
+            for child in children.iter() {
+                if glow_overlays.get(child).is_ok() {
+                    commands.entity(child).despawn();
+                }
+            }
+        }
+
+        commands.entity(entity).remove::<HasGlowOverlay>();
     }
 }
