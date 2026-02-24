@@ -75,6 +75,7 @@ pub fn flags_from_keyboard(keyboard: &ButtonInput<KeyCode>) -> u16 {
 }
 
 /// Build input flags from a simulated key string (e.g., "D", "1"-"9", "0").
+#[cfg(feature = "dev")]
 pub fn flags_from_key_string(key: &str) -> u16 {
     let key = key.trim().to_uppercase();
     if key == "D" {

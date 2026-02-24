@@ -84,9 +84,7 @@ mod inner {
         let latest_ver = latest.version.trim_start_matches('v');
         let current_ver = CURRENT_VERSION.trim_start_matches('v');
 
-        if self_update::version::bump_is_greater(current_ver, latest_ver)
-            .unwrap_or(false)
-        {
+        if self_update::version::bump_is_greater(current_ver, latest_ver).unwrap_or(false) {
             Ok(CheckResult::Available {
                 version: latest_ver.to_string(),
             })
@@ -249,10 +247,7 @@ mod inner {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(
-                &current_exe,
-                std::fs::Permissions::from_mode(0o755),
-            );
+            let _ = std::fs::set_permissions(&current_exe, std::fs::Permissions::from_mode(0o755));
         }
 
         // 8. Cleanup temp files.

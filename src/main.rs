@@ -16,7 +16,9 @@ mod network;
 mod screens;
 mod theme;
 
-use bevy::{asset::AssetMetaCheck, prelude::*, remote::http::RemoteHttpPlugin};
+#[cfg(feature = "dev")]
+use bevy::remote::http::RemoteHttpPlugin;
+use bevy::{asset::AssetMetaCheck, prelude::*};
 use bevy_defer::AsyncPlugin;
 use bevy_rich_text3d::Text3dPlugin;
 

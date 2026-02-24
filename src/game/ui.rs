@@ -5,16 +5,14 @@ use bevy::prelude::*;
 use super::{
     Acceleration, BarricadeEffect, Block, BrutalityEffect, CombustEffect, CorruptionEffect, Cost,
     DRAW_COUNT, DarkEmbraceEffect, Deck, DemonFormEffect, DiscardPile, EvolveEffect,
-    FeelNoPainEffect, FireBreathingEffect, GameResult, Hand, Health, JuggernautEffect,
-    LocalPlayer, MetallicizeEffect, Opponent, PendingInput, RageEffect, RuptureEffect, Strength,
-    Thorns, Vulnerable, Weak,
+    FeelNoPainEffect, FireBreathingEffect, GameResult, Hand, Health, JuggernautEffect, LocalPlayer,
+    MetallicizeEffect, Opponent, PendingInput, RageEffect, RuptureEffect, Strength, Thorns,
+    Vulnerable, Weak,
     health::{DamageMessage, HealMessage},
 };
-use crate::{
-    AppSystems,
-    input::{INPUT_DRAW, flags_from_key_string},
-    screens::Screen,
-};
+#[cfg(feature = "dev")]
+use crate::input::flags_from_key_string;
+use crate::{AppSystems, input::INPUT_DRAW, screens::Screen};
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<StatusSummary>();
@@ -669,7 +667,10 @@ fn build_status_string(
         effects.push("Corrupt".to_string());
     }
     if let Some(b) = brutal {
-        effects.push(format!("Brutal({:.0}/s +{})", b.self_damage_per_sec, b.draw));
+        effects.push(format!(
+            "Brutal({:.0}/s +{})",
+            b.self_damage_per_sec, b.draw
+        ));
     }
     if let Some(de) = dark_embrace {
         effects.push(format!("DkEmb+{}", de.draw_on_exhaust));
@@ -779,8 +780,6 @@ fn handle_result_input(
     }
 }
 
-/// Handle simulated input from BRP (dev only).
-#[cfg(feature = "dev")]
 // ============================================================================
 // Damage Flash Effect
 // ============================================================================
@@ -911,6 +910,7 @@ fn update_heal_flash(
     }
 }
 
+#[cfg(feature = "dev")]
 fn handle_simulated_input(
     mut commands: Commands,
     sim_input: Option<Res<SimulateInput>>,

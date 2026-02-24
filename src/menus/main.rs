@@ -10,10 +10,7 @@ pub(super) fn plugin(app: &mut App) {
     #[cfg(not(target_family = "wasm"))]
     {
         app.add_systems(OnEnter(Menu::Main), spawn_update_banner);
-        app.add_systems(
-            Update,
-            refresh_update_banner.run_if(in_state(Menu::Main)),
-        );
+        app.add_systems(Update, refresh_update_banner.run_if(in_state(Menu::Main)));
     }
 }
 
@@ -96,8 +93,7 @@ mod update_ui {
 
         match &*status {
             UpdateStatus::Available { latest_version } => {
-                let version_text =
-                    format!("v{} → v{latest_version}", env!("CARGO_PKG_VERSION"));
+                let version_text = format!("v{} → v{latest_version}", env!("CARGO_PKG_VERSION"));
                 commands.spawn((
                     Name::new("Update Banner"),
                     UpdateBanner,

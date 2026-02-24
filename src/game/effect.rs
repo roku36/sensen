@@ -370,9 +370,10 @@ fn apply_card_effect(
             self_damage_per_sec,
             enemy_damage_per_sec,
         } => {
-            commands
-                .entity(player)
-                .insert(CombustEffect::new(*self_damage_per_sec, *enemy_damage_per_sec));
+            commands.entity(player).insert(CombustEffect::new(
+                *self_damage_per_sec,
+                *enemy_damage_per_sec,
+            ));
         }
         CardEffect::DemonForm(strength_per_second) => {
             commands
@@ -418,9 +419,11 @@ fn apply_card_effect(
             draw,
             draw_interval,
         } => {
-            commands
-                .entity(player)
-                .insert(BrutalityEffect::new(*self_damage_per_sec, *draw, *draw_interval));
+            commands.entity(player).insert(BrutalityEffect::new(
+                *self_damage_per_sec,
+                *draw,
+                *draw_interval,
+            ));
         }
         CardEffect::Exhaust => {
             // Card is exhausted (removed from combat) - handled by deck system

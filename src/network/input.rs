@@ -4,9 +4,11 @@ use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy_ggrs::{LocalInputs, LocalPlayers};
 
+#[cfg(feature = "dev")]
+use crate::input::flags_from_key_string;
 use crate::{
     game::PendingInput,
-    input::{GameInput, flags_from_key_string, flags_from_keyboard},
+    input::{GameInput, flags_from_keyboard},
 };
 
 use super::SensenGgrsConfig;

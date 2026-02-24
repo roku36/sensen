@@ -109,6 +109,7 @@ impl OpponentBundle {
 /// Create a starter deck (Ironclad-style).
 /// Uses CardId variants for clarity.
 pub fn create_test_deck() -> Vec<CardId> {
+    #[allow(unused_mut)]
     let mut deck = vec![
         // === STARTER ATTACKS ===
         CardId::Strike,

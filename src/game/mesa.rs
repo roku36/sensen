@@ -949,7 +949,10 @@ fn effect_lines(effect: &CardEffect, lines: &mut Vec<String>) {
         CardEffect::Combust {
             self_damage_per_sec,
             enemy_damage_per_sec,
-        } => lines.push(format!("COMBUST -{:.0}/+{:.0}/s", self_damage_per_sec, enemy_damage_per_sec)),
+        } => lines.push(format!(
+            "COMBUST -{:.0}/+{:.0}/s",
+            self_damage_per_sec, enemy_damage_per_sec
+        )),
         CardEffect::DemonForm(str_per_sec) => lines.push(format!("DEMON +{:.0}STR/s", str_per_sec)),
         CardEffect::Barricade => lines.push("BARRICADE".to_string()),
         CardEffect::Juggernaut(dmg) => lines.push(format!("JUGG {:.0}", dmg)),
