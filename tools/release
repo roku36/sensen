@@ -9,10 +9,18 @@ sed -i '' "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
 # Cargo.lock を更新
 cargo check --quiet 2>/dev/null || true
 
-# コミット＆プッシュ
-git add Cargo.toml Cargo.lock
-git commit -m "v${VERSION}"
-git push
+# 変更があればコミット＆プッシュ
+if ! git diff --quiet Cargo.toml Cargo.lock 2>/dev/null; then
+  git add Cargo.toml Cargo.lock
+  git commit -m "v${VERSION}"
+  git push
+else
+  echo "バージョンは既に ${VERSION} です。コミットをスキップ。"
+  # 未プッシュのコミットがあればプッシュ
+  if [ "$(git rev-list --count @{u}..HEAD 2>/dev/null)" -gt 0 ]; then
+    git push
+  fi
+fi
 
 # GitHub Actions の release ワークフローをトリガー
 gh workflow run release.yaml -f version="v${VERSION}"

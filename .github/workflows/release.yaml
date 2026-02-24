@@ -123,6 +123,7 @@ jobs:
       # Avoid rate-limiting. See: <https://github.com/cargo-bins/cargo-binstall/issues/2045>.
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - platform: web
