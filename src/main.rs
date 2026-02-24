@@ -5,6 +5,7 @@
 
 mod asset_tracking;
 mod audio;
+mod auto_update;
 mod demo;
 #[cfg(feature = "dev")]
 mod dev_tools;
@@ -65,6 +66,7 @@ impl Plugin for AppPlugin {
         app.add_plugins((
             asset_tracking::plugin,
             audio::plugin,
+            auto_update::plugin,
             demo::plugin,
             #[cfg(feature = "dev")]
             dev_tools::plugin,

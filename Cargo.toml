@@ -22,6 +22,12 @@ tracing = { version = "0.1", features = [
     "release_max_level_warn",
 ] }
 
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+self_update = { version = "0.42", default-features = false, features = ["archive-zip", "compression-flate2"] }
+ureq = "2"
+zip = "2"
+self-replace = "1"
+
 [target.wasm32-unknown-unknown.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }
 bevy_ggrs = { version = "0.20", features = ["wasm-bindgen"] }

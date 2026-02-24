@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+VERSION="${1:?Usage: tools/release <version>  (e.g. 0.2.0)}"
+
+# Cargo.toml のバージョンを更新
+sed -i '' "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+
+# Cargo.lock を更新
+cargo check --quiet 2>/dev/null || true
+
+# コミット＆プッシュ
+git add Cargo.toml Cargo.lock
+git commit -m "v${VERSION}"
+git push
+
+# GitHub Actions の release ワークフローをトリガー
+gh workflow run release.yaml -f version="v${VERSION}"
+
+echo ""
+echo "=== v${VERSION} リリース開始 ==="
+echo "進捗確認: gh run watch"

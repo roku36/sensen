@@ -144,7 +144,7 @@ jobs:
           - platform: macos
             targets: x86_64-apple-darwin aarch64-apple-darwin
             app_suffix: .app/Contents/MacOS
-            package_ext: .dmg
+            package_ext: .zip
             runner: macos-latest
     runs-on: ${{ matrix.runner }}
     permissions:
@@ -290,8 +290,7 @@ jobs:
         working-directory: tmp/app
         run: |
           if [ '${{ matrix.platform }}' = 'macos' ]; then
-            ln -s /Applications .
-            hdiutil create -fs HFS+ -volname '${{ env.app_package_name }}' -srcfolder . '${{ env.package }}'
+            zip --recurse-paths '${{ env.package }}' '${{ env.app_package_name }}.app'
           else
             zip --recurse-paths '${{ env.package }}' '${{ env.app_package_name }}'
           fi
