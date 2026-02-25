@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# debug-p2p - Claude用P2Pデバッグツール
+# Usage: tools/debug-p2p [web|native] [--matchbox-log PATH]
+#
+# web:    bevy run webを起動（ブラウザで2タブ開く）。matchboxログ取得可。
+# native: BRP付きクライアント2つ起動。tools/brpでゲーム操作可。
+#
+# どちらもmatchbox_serverを自動起動し、ログを /tmp/matchbox.log に出力。
+
+set -euo pipefail
+
+MODE="${1:-web}"
+MATCHBOX_LOG="${MATCHBOX_LOG:-/tmp/matchbox.log}"
+
+# Parse --matchbox-log option
+for arg in "$@"; do
+  case "$arg" in
+    --matchbox-log=*) MATCHBOX_LOG="${arg#*=}" ;;
+  esac
+done
+
+# ── matchbox_server ──────────────────────────────────────────────────
+
+# 既存のmatchbox_serverを停止してログ付きで再起動
+if pgrep -f matchbox_server > /dev/null; then
+  echo "既存のmatchbox_serverを停止..."
+  pkill -f matchbox_server
+  sleep 1
+fi
+
+echo "matchbox_server 起動 (log: ${MATCHBOX_LOG})..."
+RUST_LOG=info matchbox_server > "${MATCHBOX_LOG}" 2>&1 &
+MATCHBOX_PID=$!
+sleep 1
+
+if ! kill -0 "$MATCHBOX_PID" 2>/dev/null; then
+  echo "ERROR: matchbox_server の起動に失敗"
+  exit 1
+fi
+echo "matchbox_server PID: ${MATCHBOX_PID}"
+
+# ── クリーンアップ ───────────────────────────────────────────────────
+
+cleanup() {
+  echo ""
+  echo "クリーンアップ..."
+  pkill -f "sensen.*brp-port" 2>/dev/null || true
+  kill "$MATCHBOX_PID" 2>/dev/null || true
+  echo "matchbox ログ: ${MATCHBOX_LOG}"
+}
+trap cleanup EXIT
+
+# ── モード別起動 ─────────────────────────────────────────────────────
+
+case "$MODE" in
+  web)
+    echo ""
+    echo "=== Web P2P デバッグ ==="
+    echo "bevy run web を起動中..."
+    echo ""
+    echo "matchbox ログ確認: tail -f ${MATCHBOX_LOG}"
+    echo "Ctrl+C で終了"
+    echo ""
+    bevy run web &
+    WEB_PID=$!
+
+    # ビルド完了を待つ (ポート4000が開くまで)
+    echo "ビルド待ち..."
+    for i in $(seq 1 60); do
+      if curl -sf http://127.0.0.1:4000 > /dev/null 2>&1; then
+        break
+      fi
+      sleep 1
+    done
+
+    # ?lobby 付きで2タブ開く
+    echo "ブラウザ2タブ起動 (Lobby直行)..."
+    open "http://127.0.0.1:4000/?lobby"
+    sleep 1
+    open "http://127.0.0.1:4000/?lobby"
+
+    wait "$WEB_PID"
+    ;;
+
+  native)
+    echo ""
+    echo "=== Native P2P デバッグ ==="
+    echo "Client 1 (BRP port 15702) 起動..."
+    cargo run --features dev -- --brp-port=15702 --lobby > /tmp/client1.log 2>&1 &
+    C1_PID=$!
+    sleep 3
+
+    echo "Client 2 (BRP port 15703) 起動..."
+    cargo run --features dev -- --brp-port=15703 --lobby > /tmp/client2.log 2>&1 &
+    C2_PID=$!
+
+    echo ""
+    echo "Client 1 PID: ${C1_PID} (log: /tmp/client1.log)"
+    echo "Client 2 PID: ${C2_PID} (log: /tmp/client2.log)"
+    echo ""
+    echo "BRP操作: tools/brp <cmd> --port 15702|15703"
+    echo "matchbox ログ: tail -f ${MATCHBOX_LOG}"
+    echo ""
+    wait
+    ;;
+
+  *)
+    echo "Usage: tools/debug-p2p [web|native]"
+    exit 1
+    ;;
+esac

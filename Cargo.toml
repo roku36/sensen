@@ -27,6 +27,7 @@ tracing = { version = "0.1", features = [
 getrandom = { version = "0.3", features = ["wasm_js"] }
 bevy_ggrs = { version = "0.20", features = ["wasm-bindgen"] }
 bevy_matchbox = { version = "0.14", features = ["ggrs"] }
+web-sys = { version = "0.3", features = ["Window", "Location"] }
 
 [features]
 # Default to a native dev build.
@@ -124,3 +125,6 @@ codegen-units = 4
 
 [profile.ci.package."*"]
 opt-level = 0
+
+[patch.crates-io]
+matchbox_socket = { path = "third_party/matchbox_socket" }

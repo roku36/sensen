@@ -1,36 +1,47 @@
 ---
 name: test-p2p
-description: P2P対戦テスト。matchbox_serverとクライアント2つを起動し、BRP経由でゲームプレイをテストする。
+description: P2P対戦テスト。web版またはnative版でmatchbox_server + クライアントを起動しテストする。
 user-invocable: true
 allowed-tools: Bash, Read
-argument-hint: [action]
+argument-hint: [web|native] [action]
 ---
 
 # Sensen P2P Test
 
-`tools/brp` スクリプトを使ってP2P対戦をテストする。
+`tools/debug-p2p` でP2P環境を起動し、テストする。
 
-## 環境確認
+## モード選択
 
-まず以下を確認:
-- `matchbox_server` が起動しているか (`pgrep -f matchbox_server`)
-- 起動していなければ `matchbox_server &` で起動
+| モード | 用途 | BRP操作 |
+|--------|------|---------|
+| `web` | web版の動作確認・マッチング速度調査 | 不可（matchboxログで確認） |
+| `native` | BRPでゲームロジック・同期のデバッグ | `tools/brp` で操作可能 |
+
+**原則**: 挙動テスト・ゲームロジックの確認 → `native`、web固有の問題調査 → `web`
 
 ## テスト手順
 
-### 1. クライアント起動
+### 1. 環境起動
+
 ```bash
-cargo run --features dev -- --brp-port=15702 --lobby > /tmp/client1.log 2>&1 &
-sleep 2
-cargo run --features dev -- --brp-port=15703 --lobby > /tmp/client2.log 2>&1 &
-sleep 5
+# web版（ブラウザで2タブ開く）
+tools/debug-p2p web &
+
+# native版（BRP付きクライアント2つ）
+tools/debug-p2p native &
 ```
 
-### 2. GGRS接続待ち
-Lobby画面で自動接続。Gameplay画面に自動遷移するまで待つ。
-ログで確認: `grep -i "synchronized\|gameplay" /tmp/client1.log`
+matchbox_serverは自動起動され、ログは `/tmp/matchbox.log` に出力される。
 
-### 3. ゲーム操作（tools/brp経由）
+### 2. matchboxログ確認
+
+```bash
+cat /tmp/matchbox.log
+```
+
+マッチング遅延の調査にはタイムスタンプを確認。
+
+### 3. ゲーム操作（native のみ）
 
 ```bash
 # Client 1でドロー
@@ -40,26 +51,29 @@ tools/brp draw --port 15702
 tools/brp play 1 --port 15702
 ```
 
-### 4. 状態確認
+### 4. 状態確認（native のみ）
 
 ```bash
-# Client 1の全状態
 tools/brp status --port 15702
-
-# Client 2の全状態
 tools/brp status --port 15703
-
-# HPだけ確認
-tools/brp hp --port 15702
-tools/brp hp --port 15703
 ```
 
-### 5. 期待される同期結果
+### 5. クライアントログ確認
+
+```bash
+# native
+grep -i "synchronized\|gameplay\|matchbox\|peer" /tmp/client1.log
+grep -i "synchronized\|gameplay\|matchbox\|peer" /tmp/client2.log
+```
+
+### 6. 期待される同期結果
 Client 1がカードをプレイした場合:
 - Client 1: Opponent HP減少（自分が相手を攻撃）
 - Client 2: LocalPlayer HP減少（相手から攻撃を受けた）
 
 ## クリーンアップ
+`tools/debug-p2p` は Ctrl+C で自動クリーンアップ。手動の場合:
 ```bash
 pkill -f "sensen.*brp-port"
+pkill -f matchbox_server
 ```

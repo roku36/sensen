@@ -54,10 +54,20 @@ pub enum Screen {
 #[reflect(Resource)]
 pub struct GotoScreen(pub Screen);
 
-/// Check for --lobby CLI arg to skip directly to lobby
+/// Check for --lobby CLI arg (native) or ?lobby URL param (web) to skip directly to lobby
 #[cfg(feature = "dev")]
 pub fn check_cli_lobby_arg() -> bool {
-    std::env::args().any(|arg| arg == "--lobby")
+    #[cfg(target_family = "wasm")]
+    {
+        web_sys::window()
+            .and_then(|w| w.location().search().ok())
+            .map(|s| s.contains("lobby"))
+            .unwrap_or(false)
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        std::env::args().any(|arg| arg == "--lobby")
+    }
 }
 
 #[cfg(feature = "dev")]

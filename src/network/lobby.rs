@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use bevy_ggrs::Session;
 use bevy_ggrs::ggrs::SessionState;
 use bevy_ggrs::prelude::*;
-use bevy_matchbox::matchbox_socket::WebRtcSocketBuilder;
+use bevy_matchbox::matchbox_socket::{RtcIceServerConfig, WebRtcSocketBuilder};
 use bevy_matchbox::prelude::*;
 
 use super::{NetworkPlayers, SensenGgrsConfig, match_seed_from_peers};
@@ -33,8 +33,21 @@ pub struct LobbyText;
 pub fn start_matchbox_socket(mut commands: Commands) {
     let room_url = MATCHBOX_SERVER.to_string();
     info!("Connecting to matchbox server: {}", room_url);
-    // Create socket with unreliable channel for GGRS
-    let socket = MatchboxSocket::from(WebRtcSocketBuilder::new(room_url).add_unreliable_channel());
+
+    let mut builder = WebRtcSocketBuilder::new(room_url).add_unreliable_channel();
+
+    // localhostではSTUN不要。デフォルトのGoogle STUNはICE gathering完了まで~40秒かかるため、
+    // ICEサーバー0個にしてhost候補のみで即接続する。
+    // 本番では適切なSTUN/TURNサーバーを設定すること。
+    if MATCHBOX_SERVER.contains("localhost") || MATCHBOX_SERVER.contains("127.0.0.1") {
+        builder = builder.ice_server(RtcIceServerConfig {
+            urls: vec![],
+            username: None,
+            credential: None,
+        });
+    }
+
+    let socket = MatchboxSocket::from(builder);
     commands.insert_resource(socket);
 }
 
@@ -85,21 +98,30 @@ pub fn lobby_system(
     };
 
     // Update socket state
-    let Ok(_peer_changes) = socket.try_update_peers() else {
+    let Ok(peer_changes) = socket.try_update_peers() else {
         warn!("Socket dropped");
         return;
     };
 
+    // Log peer changes for debugging
+    for change in &peer_changes {
+        info!("Peer change: {:?}", change);
+    }
+
     if let Some(session) = session.as_ref() {
-        let running = matches!(
-            session.as_ref(),
-            Session::P2P(s) if s.current_state() == SessionState::Running
-        );
+        let (running, state_str) = match session.as_ref() {
+            Session::P2P(s) => {
+                let state = s.current_state();
+                (state == SessionState::Running, format!("{:?}", state))
+            }
+            _ => (false, "Unknown".to_string()),
+        };
+        info!("GGRS session state: {}", state_str);
         for mut text in &mut lobby_text {
             text.0 = if running {
                 "Synchronized. Starting game...".to_string()
             } else {
-                "Synchronizing...".to_string()
+                format!("Synchronizing... ({})", state_str)
             };
         }
         if running {
@@ -113,6 +135,10 @@ pub fn lobby_system(
 
     // Get connected peers
     let connected_peers = socket.connected_peers().count();
+    let all_peers: Vec<_> = socket.connected_peers().collect();
+    if !all_peers.is_empty() {
+        info!("Connected peers: {} {:?}", connected_peers, all_peers);
+    }
 
     // Update UI
     for mut text in &mut lobby_text {
