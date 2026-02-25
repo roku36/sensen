@@ -4,32 +4,19 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version number in the format `v1.2.3`"
+        description: "Version (e.g. v0.2.0)"
         required: true
         type: string
-      deploy_to_itch:
-        description: "Deploy to itch.io"
-        default: true
-        type: boolean
-      deploy_to_github_pages:
-        description: "Deploy to GitHub Pages"
-        default: true
-        type: boolean
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
-  cancel-in-progress: true
-
-env:
-  cargo_build_binary_name: sensen
-  itch_page: roku36/sensen
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  # Build web bundle.
-  build:
+  release:
     runs-on: ubuntu-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -51,63 +38,75 @@ jobs:
           cargo binstall --locked --no-confirm --force wasm-opt
           bevy build --locked --release --yes web --bundle
 
-      - name: Upload web bundle for itch.io
-        if: ${{ inputs.deploy_to_itch }}
-        uses: actions/upload-artifact@v4
-        with:
-          path: target/bevy_web/web-release/${{ env.cargo_build_binary_name }}
-          name: package-web
-          retention-days: 1
+      - name: Save build output
+        run: cp -r target/bevy_web/web-release/sensen /tmp/web-bundle
 
-      - name: Upload web bundle for GitHub Pages
-        if: ${{ inputs.deploy_to_github_pages }}
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: target/bevy_web/web-release/${{ env.cargo_build_binary_name }}
-
-  # Deploy to itch.io.
-  deploy-to-itch:
-    runs-on: ubuntu-latest
-    needs: build
-    if: ${{ inputs.deploy_to_itch }}
-
-    steps:
-      - name: Download web bundle
-        uses: actions/download-artifact@v4
-        with:
-          name: package-web
-          path: tmp/web
-
-      - name: Install butler
+      - name: Checkout gh-pages branch
         run: |
-          curl -L -o butler.zip 'https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default'
-          unzip butler.zip
-          chmod +x butler
-          ./butler -V
+          git fetch origin gh-pages:gh-pages 2>/dev/null || true
+          if git rev-parse --verify gh-pages >/dev/null 2>&1; then
+            git checkout gh-pages
+          else
+            git checkout --orphan gh-pages
+            git rm -rf .
+            git commit --allow-empty -m "init gh-pages"
+          fi
 
-      - name: Upload to itch.io
+      - name: Deploy versioned build
         env:
-          BUTLER_API_KEY: ${{ secrets.BUTLER_CREDENTIALS }}
+          VERSION: ${{ inputs.version }}
         run: |
-          ./butler push \
-            --fix-permissions \
-            --userversion='${{ inputs.version }}' \
-            tmp/web \
-            '${{ env.itch_page }}':web
+          # Clean and copy to versioned directory
+          rm -rf "${VERSION}"
+          cp -r /tmp/web-bundle "${VERSION}"
 
-  # Deploy to GitHub Pages.
-  deploy-to-github-pages:
-    runs-on: ubuntu-latest
-    needs: build
-    if: ${{ inputs.deploy_to_github_pages }}
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+          # Clean and copy to latest
+          rm -rf latest
+          cp -r /tmp/web-bundle latest
 
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deploy
-        uses: actions/deploy-pages@v4
+      - name: Generate index.html
+        run: |
+          cat > index.html << 'HEADER'
+          <!DOCTYPE html>
+          <html lang="ja">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Sensen</title>
+            <style>
+              body { font-family: system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; background: #0a0a0f; color: #e0e0e0; }
+              h1 { color: #fff; }
+              a { color: #6ea8fe; text-decoration: none; }
+              a:hover { text-decoration: underline; }
+              .latest { font-size: 1.2em; margin-bottom: 24px; }
+              ul { list-style: none; padding: 0; }
+              li { padding: 6px 0; }
+            </style>
+          </head>
+          <body>
+            <h1>Sensen</h1>
+            <p class="latest"><a href="latest/">▶ Play Latest</a></p>
+            <h2>Versions</h2>
+            <ul>
+          HEADER
+
+          # List version directories (newest first)
+          for dir in $(ls -d v*/ 2>/dev/null | sed 's|/||' | sort -rV); do
+            echo "    <li><a href=\"${dir}/\">${dir}</a></li>" >> index.html
+          done
+
+          cat >> index.html << 'FOOTER'
+            </ul>
+          </body>
+          </html>
+          FOOTER
+
+      - name: Commit and push
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git add -A
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "deploy ${VERSION}" || echo "No changes to commit"
+          git push origin gh-pages

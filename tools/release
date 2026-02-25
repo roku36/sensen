@@ -16,22 +16,21 @@ if ! git diff --quiet Cargo.toml Cargo.lock 2>/dev/null; then
   git push
 else
   echo "バージョンは既に ${VERSION} です。コミットをスキップ。"
-  # 未プッシュのコミットがあればプッシュ
   if [ "$(git rev-list --count @{u}..HEAD 2>/dev/null)" -gt 0 ]; then
     git push
   fi
 fi
 
-# GitHub Actions の release ワークフローをトリガー（web-only）
-gh workflow run release.yaml \
-  -f version="v${VERSION}" \
-  -f deploy_to_itch=true \
-  -f deploy_to_github_pages=true
+# GitHub Actions の release ワークフローをトリガー
+gh workflow run release.yaml -f version="v${VERSION}"
+
+PAGES_URL="$(gh repo view --json owner,name -q '(.owner.login) + ".github.io/" + .name' 2>/dev/null || echo 'roku36.github.io/sensen')"
 
 echo ""
 echo "=== v${VERSION} リリース開始 ==="
 echo "進捗確認: gh run watch"
 echo ""
 echo "デプロイ先:"
-echo "  itch.io: https://roku36.itch.io/sensen"
-echo "  GitHub Pages: https://$(gh repo view --json owner,name -q '.owner.login + \".github.io/\" + .name' 2>/dev/null || echo '<owner>.github.io/sensen')"
+echo "  最新版:     https://${PAGES_URL}/latest/"
+echo "  v${VERSION}: https://${PAGES_URL}/v${VERSION}/"
+echo "  一覧:       https://${PAGES_URL}/"
