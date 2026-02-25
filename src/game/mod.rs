@@ -24,7 +24,6 @@ pub use status::*;
 
 use bevy::prelude::*;
 use bevy_ggrs::GgrsSchedule;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::AppSystems;
 
@@ -42,11 +41,9 @@ pub struct MatchSeed(pub u64);
 
 impl Default for MatchSeed {
     fn default() -> Self {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(0);
-        Self(nanos ^ 0x9e3779b97f4a7c15)
+        let mut buf = [0u8; 8];
+        getrandom::fill(&mut buf).unwrap_or_default();
+        Self(u64::from_le_bytes(buf) ^ 0x9e3779b97f4a7c15)
     }
 }
 

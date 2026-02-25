@@ -5,7 +5,6 @@
 
 mod asset_tracking;
 mod audio;
-mod auto_update;
 mod demo;
 #[cfg(feature = "dev")]
 mod dev_tools;
@@ -16,11 +15,11 @@ mod network;
 mod screens;
 mod theme;
 
-#[cfg(feature = "dev")]
+#[cfg(feature = "dev_native")]
 use bevy::remote::http::RemoteHttpPlugin;
 use bevy::{asset::AssetMetaCheck, prelude::*};
 use bevy_defer::AsyncPlugin;
-use bevy_rich_text3d::Text3dPlugin;
+use bevy_rich_text3d::{LoadFonts, Text3dPlugin};
 
 fn main() -> AppExit {
     App::new().add_plugins(AppPlugin).run()
@@ -52,10 +51,16 @@ impl Plugin for AppPlugin {
             MeshPickingPlugin,
             AsyncPlugin::default_settings(),
             Text3dPlugin {
-                load_system_fonts: true,
+                load_system_fonts: cfg!(not(target_family = "wasm")),
                 ..default()
             },
         ));
+        // Embed a font for wasm (no system fonts available).
+        app.insert_resource(LoadFonts {
+            font_embedded: vec![include_bytes!("../assets/fonts/FiraSans-Bold.ttf")],
+            ..default()
+        });
+
         app.insert_resource(UiPickingSettings {
             require_markers: true,
         });
@@ -68,7 +73,6 @@ impl Plugin for AppPlugin {
         app.add_plugins((
             asset_tracking::plugin,
             audio::plugin,
-            auto_update::plugin,
             demo::plugin,
             #[cfg(feature = "dev")]
             dev_tools::plugin,
@@ -79,8 +83,8 @@ impl Plugin for AppPlugin {
             theme::plugin,
         ));
 
-        // Add Bevy Remote Protocol for debugging (dev only)
-        #[cfg(feature = "dev")]
+        // Add Bevy Remote Protocol for debugging (native dev only)
+        #[cfg(feature = "dev_native")]
         {
             use bevy::remote::RemotePlugin;
 

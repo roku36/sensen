@@ -22,9 +22,16 @@ else
   fi
 fi
 
-# GitHub Actions の release ワークフローをトリガー
-gh workflow run release.yaml -f version="v${VERSION}"
+# GitHub Actions の release ワークフローをトリガー（web-only）
+gh workflow run release.yaml \
+  -f version="v${VERSION}" \
+  -f deploy_to_itch=true \
+  -f deploy_to_github_pages=true
 
 echo ""
 echo "=== v${VERSION} リリース開始 ==="
 echo "進捗確認: gh run watch"
+echo ""
+echo "デプロイ先:"
+echo "  itch.io: https://roku36.itch.io/sensen"
+echo "  GitHub Pages: https://$(gh repo view --json owner,name -q '.owner.login + \".github.io/\" + .name' 2>/dev/null || echo '<owner>.github.io/sensen')"
