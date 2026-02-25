@@ -18,8 +18,12 @@ use crate::{
 /// Number of players in a match.
 const NUM_PLAYERS: usize = 2;
 
-/// Default matchbox server URL.
+/// Matchbox server URL.
+/// dev: ローカルmatchbox_server、release: fly.io
+#[cfg(feature = "dev")]
 const MATCHBOX_SERVER: &str = "ws://localhost:3536/sensen?next=2";
+#[cfg(not(feature = "dev"))]
+const MATCHBOX_SERVER: &str = "wss://sensen-matchbox.fly.dev/sensen?next=2";
 
 /// Marker for lobby UI elements.
 #[derive(Component)]
