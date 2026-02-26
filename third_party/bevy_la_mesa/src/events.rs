@@ -836,7 +836,7 @@ pub fn handle_render_deck<T>(
                         marker: deck_area.marker,
                     },
                     Pickable::default(),
-                    Mesh3d(meshes.add(Plane3d::default().mesh().size(2.5, 3.5).subdivisions(10))),
+                    Mesh3d(meshes.add(Plane3d::default().mesh().size(2.5, 3.5).subdivisions(2))),
                     transform,
                 ))
                 .observe(on_card_over)
@@ -846,7 +846,7 @@ pub fn handle_render_deck<T>(
                     // face
                     parent.spawn((
                         Mesh3d(
-                            meshes.add(Plane3d::default().mesh().size(2.5, 3.5).subdivisions(10)),
+                            meshes.add(Plane3d::default().mesh().size(2.5, 3.5).subdivisions(2)),
                         ),
                         MeshMaterial3d(face_material),
                     ));
@@ -854,7 +854,7 @@ pub fn handle_render_deck<T>(
                     // back
                     parent.spawn((
                         Mesh3d(
-                            meshes.add(Plane3d::default().mesh().size(2.5, 3.5).subdivisions(10)),
+                            meshes.add(Plane3d::default().mesh().size(2.5, 3.5).subdivisions(2)),
                         ),
                         MeshMaterial3d(back_material),
                         Transform::IDENTITY

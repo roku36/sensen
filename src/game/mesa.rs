@@ -1,6 +1,9 @@
 //! 3D card table rendering with bevy_la_mesa.
 
-use bevy::{color::Srgba, prelude::*, render::alpha::AlphaMode, transform::TransformSystems};
+use bevy::{
+    color::Srgba, math::Affine2, prelude::*, render::alpha::AlphaMode,
+    transform::TransformSystems,
+};
 use bevy_la_mesa::events::{
     AlignCardsInHand, CardHover, CardOut, CardPress, DiscardCardToDeck, RenderDeck,
 };
@@ -33,6 +36,12 @@ struct CardEffectTextAdded;
 #[derive(Resource, Clone)]
 struct CardTextMaterial(Handle<StandardMaterial>);
 
+#[derive(Resource, Clone)]
+struct GlowAssets {
+    mesh: Handle<Mesh>,
+    material: Handle<StandardMaterial>,
+}
+
 #[derive(Component)]
 struct HoveredCard;
 
@@ -40,9 +49,9 @@ const LOCAL_PLAYER_INDEX: usize = 1;
 const OPPONENT_PLAYER_INDEX: usize = 2;
 
 const CARD_BACK_IMAGE: &str = "images/splash.png";
-const CARD_FRONT_DAMAGE: &str = "images/ducky.png";
-const CARD_FRONT_HEAL: &str = "images/ducky.png";
-const CARD_FRONT_DRAW: &str = "images/ducky.png";
+const CARD_ATLAS_IMAGE: &str = "images/cards.png";
+const ATLAS_COLS: usize = 6;
+const ATLAS_ROWS: usize = 2;
 const HAND_FAN_RADIUS: f32 = 12.0;
 const HAND_FAN_MAX_SPAN: f32 = 10.0;
 const HAND_FAN_BASE_STEP: f32 = 0.15;
@@ -54,9 +63,9 @@ const CARD_TEXT_LIFT: f32 = 0.002;
 
 #[derive(Clone, Debug)]
 struct MesaCard {
-    #[allow(dead_code)]
     card_id: CardId,
-    front: String,
+    /// Index into the card atlas (0..ATLAS_COLS*ATLAS_ROWS).
+    atlas_index: usize,
     back: String,
 }
 
@@ -64,7 +73,7 @@ impl Default for MesaCard {
     fn default() -> Self {
         Self {
             card_id: CardId::Unknown,
-            front: CARD_FRONT_DAMAGE.to_string(),
+            atlas_index: 0,
             back: CARD_BACK_IMAGE.to_string(),
         }
     }
@@ -74,12 +83,21 @@ impl CardMetadata for MesaCard {
     type Output = CardId;
 
     fn front_image_filename(&self) -> String {
-        self.front.clone()
+        CARD_ATLAS_IMAGE.to_string()
     }
 
     fn back_image_filename(&self) -> String {
         self.back.clone()
     }
+}
+
+/// Compute the UV transform to select a tile from the card atlas.
+fn atlas_uv_transform(index: usize) -> Affine2 {
+    let col = index % ATLAS_COLS;
+    let row = index / ATLAS_COLS;
+    let scale = Vec2::new(1.0 / ATLAS_COLS as f32, 1.0 / ATLAS_ROWS as f32);
+    let translation = Vec2::new(col as f32 / ATLAS_COLS as f32, row as f32 / ATLAS_ROWS as f32);
+    Affine2::from_scale_angle_translation(scale, 0.0, translation)
 }
 
 #[derive(Resource, Default)]
@@ -247,6 +265,20 @@ fn spawn_mesa_scene(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     info!("spawn_mesa_scene called!");
+
+    // Pre-allocate glow assets (reused for all card hover effects).
+    let glow_mesh = meshes.add(Plane3d::default().mesh().size(2.7, 3.7).subdivisions(2));
+    let glow_material = materials.add(StandardMaterial {
+        base_color: Color::srgba(1.0, 0.9, 0.3, 0.3),
+        emissive: LinearRgba::new(1.0, 0.8, 0.2, 1.0) * 2.0,
+        alpha_mode: AlphaMode::Blend,
+        unlit: true,
+        ..default()
+    });
+    commands.insert_resource(GlowAssets {
+        mesh: glow_mesh,
+        material: glow_material,
+    });
 
     commands.insert_resource(GlobalAmbientLight {
         color: Color::WHITE,
@@ -683,6 +715,9 @@ fn track_hand_hover(
     }
 }
 
+/// Max cards to actually render in a deck pile. Only the top few are visible.
+const DECK_VISUAL_LIMIT: usize = 3;
+
 fn rebuild_deck_visual(
     deck_entity: Entity,
     marker: usize,
@@ -699,12 +734,19 @@ fn rebuild_deck_visual(
         }
     }
 
-    let deck = deck_cards
+    // Only render the top few cards visually — the rest are data-only.
+    let visual_cards: Vec<MesaCard> = deck_cards
         .iter()
+        .rev()
+        .take(DECK_VISUAL_LIMIT)
+        .rev()
         .map(|card_id| mesa_card_from_id(*card_id, registry))
-        .collect::<Vec<_>>();
+        .collect();
 
-    render_deck.write(RenderDeck::<MesaCard> { deck_entity, deck });
+    render_deck.write(RenderDeck::<MesaCard> {
+        deck_entity,
+        deck: visual_cards,
+    });
 }
 
 fn despawn_entity_recursive(
@@ -720,44 +762,31 @@ fn despawn_entity_recursive(
     commands.entity(entity).despawn();
 }
 
-fn mesa_card_from_id(card_id: CardId, registry: &CardRegistry) -> MesaCard {
-    let front = registry
-        .get(card_id)
-        .map(|def| match primary_effect(&def.effect) {
-            CardEffect::Damage(_) | CardEffect::MultiHit { .. } => CARD_FRONT_DAMAGE,
-            CardEffect::Heal(_) => CARD_FRONT_HEAL,
-            CardEffect::Draw(_) => CARD_FRONT_DRAW,
-            CardEffect::Block(_) | CardEffect::DoubleBlock => CARD_FRONT_HEAL,
-            CardEffect::Thorns(_) => CARD_FRONT_DAMAGE,
-            CardEffect::Strength(_) | CardEffect::DoubleStrength | CardEffect::DemonForm(_) => {
-                CARD_FRONT_DAMAGE
-            }
-            CardEffect::Vulnerable(_) | CardEffect::SelfVulnerable(_) | CardEffect::Weak(_) => {
-                CARD_FRONT_DAMAGE
-            }
-            CardEffect::Accelerate { .. } => CARD_FRONT_DRAW,
-            CardEffect::BodySlam => CARD_FRONT_DAMAGE,
-            CardEffect::Bloodletting(_) => CARD_FRONT_DAMAGE,
-            CardEffect::Rage(_) | CardEffect::Metallicize(_) | CardEffect::Barricade => {
-                CARD_FRONT_HEAL
-            }
-            CardEffect::Combust { .. } | CardEffect::Juggernaut(_) => CARD_FRONT_DAMAGE,
-            CardEffect::DarkEmbrace { .. } | CardEffect::Evolve { .. } | CardEffect::Corruption => {
-                CARD_FRONT_DRAW
-            }
-            CardEffect::FeelNoPain { .. } => CARD_FRONT_HEAL,
-            CardEffect::FireBreathing { .. }
-            | CardEffect::Rupture { .. }
-            | CardEffect::Brutality { .. } => CARD_FRONT_DAMAGE,
-            CardEffect::Exhaust | CardEffect::AddStatus(_) => CARD_FRONT_DRAW,
-            CardEffect::Combo(_) => CARD_FRONT_DAMAGE,
-        })
-        .unwrap_or(CARD_FRONT_DAMAGE)
-        .to_string();
+/// Map a CardId to an atlas index (0..11).
+/// Atlas layout: 2 rows x 6 columns, left-to-right, top-to-bottom.
+fn atlas_index_for_card(card_id: CardId) -> usize {
+    match card_id {
+        CardId::Strike => 0,
+        CardId::Bash => 1,
+        CardId::Defend => 2,
+        CardId::IronWave => 3,
+        CardId::PommelStrike => 4,
+        CardId::Clothesline => 5,
+        CardId::ShrugItOff => 6,
+        CardId::Flex => 7,
+        CardId::Inflame => 8,
+        CardId::Metallicize => 9,
+        CardId::TwinStrike => 10,
+        CardId::BodySlam => 11,
+        // Fallback: cycle through atlas slots by card ID value.
+        other => (other as usize) % (ATLAS_COLS * ATLAS_ROWS),
+    }
+}
 
+fn mesa_card_from_id(card_id: CardId, _registry: &CardRegistry) -> MesaCard {
     MesaCard {
         card_id,
-        front,
+        atlas_index: atlas_index_for_card(card_id),
         back: CARD_BACK_IMAGE.to_string(),
     }
 }
@@ -777,9 +806,10 @@ fn spawn_hand_card(
         ..default()
     });
 
-    let face_texture = asset_server.load(card.front.clone());
+    let face_texture: Handle<Image> = asset_server.load(CARD_ATLAS_IMAGE);
     let face_material: Handle<StandardMaterial> = materials.add(StandardMaterial {
         base_color_texture: Some(face_texture),
+        uv_transform: atlas_uv_transform(card.atlas_index),
         ..default()
     });
 
@@ -856,13 +886,6 @@ enum EffectKind {
     Block,
     Thorns,
     Accelerate,
-}
-
-fn primary_effect(effect: &CardEffect) -> &CardEffect {
-    match effect {
-        CardEffect::Combo(effects) => effects.first().map(primary_effect).unwrap_or(effect),
-        _ => effect,
-    }
 }
 
 fn unified_effect_kind(effect: &CardEffect) -> Option<EffectKind> {
@@ -1007,7 +1030,10 @@ fn add_effect_text_to_cards(
     mut commands: Commands,
     registry: Res<CardRegistry>,
     text_material: Option<Res<CardTextMaterial>>,
-    cards_without_text: Query<(Entity, &MesaCardComponent<MesaCard>), Without<CardEffectTextAdded>>,
+    cards_without_text: Query<
+        (Entity, &MesaCardComponent<MesaCard>),
+        (Without<CardEffectTextAdded>, With<MesaHand>),
+    >,
 ) {
     let Some(text_material) = text_material else {
         return;
@@ -1272,37 +1298,23 @@ fn update_card_glow_on_hover(
     has_glow_query: Query<&HasGlowOverlay>,
     children_query: Query<&Children>,
     glow_overlays: Query<Entity, With<CardGlowOverlay>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    glow_assets: Res<GlowAssets>,
 ) {
     // Add glow to hovered cards
     for (entity, hand) in hovered_cards.iter() {
-        // Only glow local player's cards
         if hand.player != LOCAL_PLAYER_INDEX {
             continue;
         }
-
-        // Check if already has glow
         if has_glow_query.get(entity).is_ok() {
             continue;
         }
-
-        // Create glow overlay mesh using StandardMaterial with emissive
-        let glow_mesh = meshes.add(Plane3d::default().mesh().size(2.7, 3.7).subdivisions(4));
-        let glow_material = materials.add(StandardMaterial {
-            base_color: Color::srgba(1.0, 0.9, 0.3, 0.3),
-            emissive: LinearRgba::new(1.0, 0.8, 0.2, 1.0) * 2.0,
-            alpha_mode: AlphaMode::Blend,
-            unlit: true,
-            ..default()
-        });
 
         let overlay_entity = commands
             .spawn((
                 Name::new("Card Glow Overlay"),
                 CardGlowOverlay,
-                Mesh3d(glow_mesh),
-                MeshMaterial3d(glow_material),
+                Mesh3d(glow_assets.mesh.clone()),
+                MeshMaterial3d(glow_assets.material.clone()),
                 Transform::from_xyz(0.0, 0.002, 0.0),
             ))
             .id();
@@ -1316,13 +1328,10 @@ fn update_card_glow_on_hover(
         if hand.player != LOCAL_PLAYER_INDEX {
             continue;
         }
-
-        // Skip if no glow
         if has_glow_query.get(entity).is_err() {
             continue;
         }
 
-        // Remove glow overlay children
         if let Ok(children) = children_query.get(entity) {
             for child in children.iter() {
                 if glow_overlays.get(child).is_ok() {
