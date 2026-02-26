@@ -258,7 +258,7 @@ fn spawn_mesa_scene(
         Name::new("Mesa Sun"),
         DirectionalLight {
             illuminance: 9000.0,
-            shadows_enabled: true,
+            shadows_enabled: false,
             ..default()
         },
         Transform::from_xyz(6.0, 12.0, 6.0).looking_at(Vec3::ZERO, Vec3::Y),
@@ -267,7 +267,7 @@ fn spawn_mesa_scene(
 
     commands.spawn((
         Name::new("Mesa Table"),
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(30.0, 20.0).subdivisions(10))),
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(30.0, 20.0).subdivisions(2))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgb(0.08, 0.09, 0.12),
             perceptual_roughness: 0.9,
@@ -297,7 +297,7 @@ fn spawn_mesa_scene(
     let local_deck = commands
         .spawn((
             Name::new("Deck Area Local"),
-            Mesh3d(meshes.add(Plane3d::default().mesh().size(2.5, 3.5).subdivisions(8))),
+            Mesh3d(meshes.add(Plane3d::default().mesh().size(2.5, 3.5).subdivisions(2))),
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: Color::srgb(0.12, 0.12, 0.16),
                 perceptual_roughness: 0.85,
@@ -314,7 +314,7 @@ fn spawn_mesa_scene(
     let opponent_deck = commands
         .spawn((
             Name::new("Deck Area Opponent"),
-            Mesh3d(meshes.add(Plane3d::default().mesh().size(2.5, 3.5).subdivisions(8))),
+            Mesh3d(meshes.add(Plane3d::default().mesh().size(2.5, 3.5).subdivisions(2))),
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: Color::srgb(0.12, 0.12, 0.16),
                 perceptual_roughness: 0.85,
@@ -783,7 +783,7 @@ fn spawn_hand_card(
         ..default()
     });
 
-    let card_mesh = meshes.add(Plane3d::default().mesh().size(2.5, 3.5).subdivisions(10));
+    let card_mesh = meshes.add(Plane3d::default().mesh().size(2.5, 3.5).subdivisions(2));
     let transform = Transform::from_translation(hand_transform.translation)
         .with_rotation(hand_transform.rotation);
 

@@ -146,6 +146,7 @@ fn spawn_camera(mut commands: Commands) {
     commands.spawn((
         Name::new("Camera"),
         Camera3d::default(),
+        Msaa::Off,
         camera_transform,
         IsDefaultUiCamera,
         UiPickingCamera,
