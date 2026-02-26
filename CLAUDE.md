@@ -2,7 +2,8 @@
 
 ## プロジェクト概要
 
-Bevy 0.17製のリアルタイムP2P対戦カードゲーム。GGRS + Matchbox WebRTCでロールバックネットコード実装。
+Bevy 0.18製のリアルタイムP2P対戦カードゲーム。GGRS + Matchbox WebRTCでロールバックネットコード実装。
+Web版のみ配信（GitHub Pages）。P2PサーバーはFly.io。
 
 ## 重要なアーキテクチャ
 
@@ -11,8 +12,12 @@ Bevy 0.17製のリアルタイムP2P対戦カードゲーム。GGRS + Matchbox W
 - Lobby画面でMatchboxサーバーに接続、2人揃うとGGRSセッション開始
 
 ### ネットワーク
-- Matchboxサーバー: `ws://localhost:3536/sensen?next=2`
-- `matchbox_server`コマンドで起動（デフォルトポート3536）
+- Matchboxサーバー:
+  - dev: `ws://localhost:3536/sensen?next=2` (`matchbox_server`コマンドで起動)
+  - release: `wss://sensen-matchbox.fly.dev/sensen?next=2` (fly.io)
+  - `src/network/lobby.rs` で `cfg(feature = "dev")` で切り替え
+- matchbox_socket: **ローカルパッチ版** (`third_party/matchbox_socket`)
+  - ICE gathering で空URLを正しく処理（`iceServers: []`）
 - GGRS入力同期: `GameInput`のビットフラグ（u16）
 
 ### P2Pゲームの視点
@@ -176,15 +181,43 @@ Client 1がカードをプレイした場合:
 - [x] **P2Pゲームロジック同期（GgrsScheduleで実行）**
 - [x] **BRP経由のGGRS入力シミュレーション（SimulatedGgrsInput）**
 
+## デプロイ
+
+### GitHub Pages (バージョン管理)
+- URL: `roku36.github.io/sensen/` (バージョン一覧)
+- `roku36.github.io/sensen/latest/` → 最新版
+- `roku36.github.io/sensen/v0.1.2/` → 特定バージョン
+- gh-pagesブランチに直接push方式
+
+### Matchbox Server (fly.io)
+- App: `sensen-matchbox` (Tokyo/nrt)
+- URL: `wss://sensen-matchbox.fly.dev/`
+- 設定: `matchbox-server/Dockerfile` + `matchbox-server/fly.toml`
+- デプロイ: `cd matchbox-server && flyctl deploy`
+
+### リリース手順
+```bash
+tools/release 0.2.0
+# → Cargo.toml更新、commit、push
+# → GitHub Actions: ビルド → gh-pagesブランチに v0.2.0/ と latest/ をデプロイ
+```
+
 ## トラブルシューティング
 
 ### BRPに接続できない
 - エンドポイントは `/brp` (例: `http://127.0.0.1:15702/brp`)
 - devフィーチャーが有効か確認: `cargo run --features dev`
+- BRPは`dev_native`フィーチャーのみ（wasmでは使用不可）
 
 ### Matchbox接続失敗
-- matchbox_serverが起動しているか確認: `pgrep -f matchbox_server`
-- 起動していなければ: `matchbox_server &`
+- ローカル: `pgrep -f matchbox_server || matchbox_server &`
+- 本番: `flyctl status -a sensen-matchbox` で確認
+- fly.ioのauto_stop有効のため、初回接続時に起動待ちが発生する場合あり
+
+### Web版P2P接続が遅い
+- ICE gatheringのSTUNタイムアウトが原因（~40秒）
+- localhostでは `RtcIceServerConfig { urls: vec![] }` でSTUN無効化済み
+- ブラウザコンソールの `[OFFER +Xms]` ログでボトルネック特定可能
 
 ### P2P同期が動作しない
 - `SimulatedGgrsInput` を使っているか確認（`SimulateInput`はローカルのみ）
